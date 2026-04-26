@@ -6,28 +6,50 @@ import { Chess } from "chess.js";
 import { type Square, type Piece } from "chess.js";
 import { databases } from "@/lib/appwrite";
 import { ID } from "appwrite";
+import ProModal from "./ProModal";
+import { PIECE_SKINS, type PieceSkin } from "@/lib/skins";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_GAMES_COLLECTION_ID!;
 
 const pieceSymbols: { [key: string]: string } = {
-    p: "♙",
-    r: "♖",
-    n: "♘",
-    b: "♗",
-    q: "♕",
-    k: "♔",
-    P: "♟",
-    R: "♜",
-    N: "♞",
-    B: "♝",
-    Q: "♛",
-    K: "♚",
+    p: "♙", r: "♖", n: "♘", b: "♗", q: "♕", k: "♔",
+    P: "♟", R: "♜", N: "♞", B: "♝", Q: "♛", K: "♚",
 };
 
 type GameMode = "player-vs-player" | "player-vs-ai";
 
-export default function Chessboard({ userId }: { userId: string }) {
+type BoardTheme = {
+    id: string;
+    name: string;
+    light: string;
+    dark: string;
+    selectedBg: string;
+    labelColor: string;
+};
+
+const BOARD_THEMES: BoardTheme[] = [
+    { id: 'classic',  name: 'Classic',  light: '#eeeed2', dark: '#769656', selectedBg: '#f6f669', labelColor: '#5d8040' },
+    { id: 'walnut',   name: 'Walnut',   light: '#f0d9b5', dark: '#b58863', selectedBg: '#f6f669', labelColor: '#8a6040' },
+    { id: 'ice',      name: 'Ice',      light: '#dce9f5', dark: '#6d9bc3', selectedBg: '#f6f669', labelColor: '#5078a0' },
+    { id: 'midnight', name: 'Midnight', light: '#5c5c5c', dark: '#2e2e2e', selectedBg: '#bcfe00', labelColor: '#888888' },
+    { id: 'neon',     name: 'Neon',     light: '#d6f57a', dark: '#4a7832', selectedBg: '#fff176', labelColor: '#6aab30' },
+];
+
+const RANKS = [8, 7, 6, 5, 4, 3, 2, 1];
+const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+const SQ = 56; // square size px
+const COORD = 20; // coordinate gutter px
+
+export default function Chessboard({
+    userId,
+    purchasedSkins,
+    onSkinPurchased,
+}: {
+    userId: string;
+    purchasedSkins: string[];
+    onSkinPurchased: (skinId: string) => void;
+}) {
     const router = useRouter();
     const [game, setGame] = useState<Chess>(new Chess());
     const [board, setBoard] = useState<(Piece | null)[][]>(game.board());
@@ -35,41 +57,38 @@ export default function Chessboard({ userId }: { userId: string }) {
     const [possibleMoves, setPossibleMoves] = useState<string[]>([]);
     const [status, setStatus] = useState("");
     const [gameMode, setGameMode] = useState<GameMode>("player-vs-player");
-    const [aiLevel, setAiLevel] = useState(5); // Default AI level (0-20)
+    const [aiLevel, setAiLevel] = useState(5);
+    const [theme, setTheme] = useState<BoardTheme>(BOARD_THEMES[0]);
     const stockfishWorker = useRef<Worker | null>(null);
     const [coachAdvice, setCoachAdvice] = useState<string>("");
     const [coachLoading, setCoachLoading] = useState(false);
+    const [analysis, setAnalysis] = useState<string>("");
+    const [analysisLoading, setAnalysisLoading] = useState(false);
+    const [gameResult, setGameResult] = useState<string>("");
+    const [showPro, setShowPro] = useState(false);
+    const [activeSkin, setActiveSkin] = useState<PieceSkin>(PIECE_SKINS[0]);
 
     useEffect(() => {
         updateStatus();
-
-        // Initialize the Stockfish worker
         stockfishWorker.current = new Worker('/stockfish-worker.js');
         stockfishWorker.current.postMessage({ type: 'init' });
-
         stockfishWorker.current.onmessage = (event) => {
             const { type, payload } = event.data;
-            if (type === 'best-move') {
-                if (payload) {
-                    game.move({
-                        from: payload.slice(0, 2) as Square,
-                        to: payload.slice(2, 4) as Square,
-                        promotion: payload.length === 5 ? payload[4] : undefined,
-                    });
-                    setBoard(game.board());
-                    updateStatus();
-                }
+            if (type === 'best-move' && payload) {
+                game.move({
+                    from: payload.slice(0, 2) as Square,
+                    to: payload.slice(2, 4) as Square,
+                    promotion: payload.length === 5 ? payload[4] : undefined,
+                });
+                setBoard(game.board());
+                updateStatus();
             }
         };
-
-        return () => {
-            stockfishWorker.current?.terminate();
-        };
+        return () => { stockfishWorker.current?.terminate(); };
     }, []);
 
     useEffect(() => {
         if (gameMode === 'player-vs-ai' && game.turn() === 'b') {
-            // AI's turn
             if (stockfishWorker.current) {
                 stockfishWorker.current.postMessage({ type: 'uci', payload: `position fen ${game.fen()}` });
                 stockfishWorker.current.postMessage({ type: 'uci', payload: `go depth ${aiLevel}` });
@@ -77,14 +96,10 @@ export default function Chessboard({ userId }: { userId: string }) {
         }
     }, [game.fen(), gameMode, aiLevel]);
 
-
     async function saveGame(result: string) {
         try {
             await databases.createDocument(DATABASE_ID, COLLECTION_ID, ID.unique(), {
-                userId,
-                result,
-                mode: gameMode,
-                pgn: game.pgn(),
+                userId, result, mode: gameMode, pgn: game.pgn(),
             });
         } catch (e) {
             console.error("Failed to save game:", e);
@@ -92,17 +107,19 @@ export default function Chessboard({ userId }: { userId: string }) {
     }
 
     function updateStatus() {
-        let newStatus = `Turn: ${game.turn() === "w" ? "White" : "Black"}`;
-
+        let newStatus = `${game.turn() === "w" ? "White" : "Black"} to move`;
         if (game.isCheckmate()) {
             const winner = game.turn() === "w" ? "Black" : "White";
-            newStatus = `Checkmate! ${winner} wins.`;
+            newStatus = `Checkmate — ${winner} wins!`;
+            setGameResult(`${winner} wins`);
             saveGame(`${winner} wins`);
         } else if (game.isDraw()) {
-            newStatus = "Draw!";
+            newStatus = "Game drawn.";
+            setGameResult("Draw");
             saveGame("draw");
+        } else if (game.inCheck()) {
+            newStatus = `Check! ${game.turn() === "w" ? "White" : "Black"} to move`;
         }
-
         setStatus(newStatus);
     }
 
@@ -111,26 +128,19 @@ export default function Chessboard({ userId }: { userId: string }) {
 
         if (selectedSquare) {
             try {
-                const move = game.move({
-                    from: selectedSquare,
-                    to: square,
-                    promotion: "q", // NOTE: always promote to a queen for simplicity
-                });
-
+                const move = game.move({ from: selectedSquare, to: square, promotion: "q" });
                 if (move) {
                     setBoard(game.board());
                     updateStatus();
                 }
-            } catch (e) {
-                // invalid move
-            }
+            } catch { /* invalid move */ }
             setSelectedSquare(null);
             setPossibleMoves([]);
         } else {
             const moves = game.moves({ square, verbose: true });
             if (moves.length > 0 && game.get(square)?.color === game.turn()) {
                 setSelectedSquare(square);
-                setPossibleMoves(moves.map((move) => move.to));
+                setPossibleMoves(moves.map((m) => m.to));
             }
         }
     }
@@ -142,11 +152,7 @@ export default function Chessboard({ userId }: { userId: string }) {
             const res = await fetch("/api/coach", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    fen: game.fen(),
-                    turn: game.turn(),
-                    pgn: game.pgn(),
-                }),
+                body: JSON.stringify({ fen: game.fen(), turn: game.turn(), pgn: game.pgn() }),
             });
             if (!res.body) return;
             const reader = res.body.getReader();
@@ -156,10 +162,34 @@ export default function Chessboard({ userId }: { userId: string }) {
                 if (done) break;
                 setCoachAdvice((prev) => prev + decoder.decode(value));
             }
-        } catch (e) {
+        } catch {
             setCoachAdvice("Coach unavailable. Check your API key.");
         } finally {
             setCoachLoading(false);
+        }
+    }
+
+    async function analyzeGame() {
+        setAnalysisLoading(true);
+        setAnalysis("");
+        try {
+            const res = await fetch("/api/analyze", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ pgn: game.pgn(), result: gameResult }),
+            });
+            if (!res.body) return;
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                setAnalysis((prev) => prev + decoder.decode(value));
+            }
+        } catch {
+            setAnalysis("Analysis unavailable. Check your API key.");
+        } finally {
+            setAnalysisLoading(false);
         }
     }
 
@@ -169,92 +199,358 @@ export default function Chessboard({ userId }: { userId: string }) {
         setBoard(newGame.board());
         setSelectedSquare(null);
         setPossibleMoves([]);
+        setAnalysis("");
+        setGameResult("");
+        setCoachAdvice("");
         updateStatus();
     }
 
-    return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-gray-800 text-white">
-            <div className="flex items-center justify-between w-full max-w-lg mb-4">
-                <h1 className="text-4xl font-bold">ChessMind</h1>
-                <button
-                    onClick={() => router.push('/profile')}
-                    className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded font-bold text-sm"
-                >
-                    Profile
-                </button>
-            </div>
-            <div className="flex gap-4 mb-4">
-                <button onClick={() => setGameMode("player-vs-player")} className={`px-4 py-2 rounded ${gameMode === 'player-vs-player' ? 'bg-blue-700' : 'bg-blue-500'}`}>
-                    Player vs Player
-                </button>
-                <button onClick={() => setGameMode("player-vs-ai")} className={`px-4 py-2 rounded ${gameMode === 'player-vs-ai' ? 'bg-green-700' : 'bg-green-500'}`}>
-                    Player vs AI
-                </button>
-            </div>
-            {gameMode === 'player-vs-ai' && (
-                <div className="flex items-center gap-2 mb-4">
-                    <label htmlFor="aiLevel">AI Level: {aiLevel}</label>
-                    <input
-                        type="range"
-                        id="aiLevel"
-                        min="0"
-                        max="20"
-                        value={aiLevel}
-                        onChange={(e) => setAiLevel(parseInt(e.target.value))}
-                        className="w-48"
-                    />
-                </div>
-            )}
-            <div className="grid grid-cols-8 border-4 border-gray-600">
-                {board.map((row, rowIndex) =>
-                    row.map((piece, colIndex) => {
-                        const square = String.fromCharCode(97 + colIndex) + (8 - rowIndex) as Square;
-                        const isEven = (rowIndex + colIndex) % 2 === 0;
-                        const squareColor = isEven ? "bg-gray-400" : "bg-gray-600";
-                        const isSelected = selectedSquare === square;
-                        const isPossibleMove = possibleMoves.includes(square);
+    async function buySkin(skinId: string) {
+        try {
+            const res = await fetch('/api/stripe/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ skinId, userId }),
+            });
+            const data = await res.json();
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                alert(`Checkout error: ${data.error || JSON.stringify(data)}`);
+            }
+        } catch (e) {
+            alert(`Network error: ${e}`);
+        }
+    }
 
+    const isOver = game.isGameOver();
+    const coordStyle = { color: theme.labelColor, fontSize: 11, fontWeight: 700, lineHeight: 1, userSelect: 'none' as const };
+
+    return (
+        <div className="min-h-screen bg-black text-white">
+            {showPro && (
+                <ProModal
+                    onClose={() => setShowPro(false)}
+                    purchasedSkins={purchasedSkins}
+                    onBuySkin={async (skinId) => {
+                        await buySkin(skinId);
+                        onSkinPurchased(skinId);
+                    }}
+                />
+            )}
+
+            {/* Nav */}
+            <nav className="border-b border-[#1a1a1a] px-6 py-4 flex items-center justify-between">
+                <span className="text-xl font-bold tracking-tight">
+                    Chess<span style={{ color: '#bcfe00' }}>Mind</span>
+                </span>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setShowPro(true)}
+                        className="text-xs uppercase tracking-widest px-4 py-2 rounded-sm font-bold transition-all hover:brightness-110 active:scale-[0.97]"
+                        style={{ backgroundColor: '#bcfe00', color: '#000' }}
+                    >
+                        ⚡ Go Pro
+                    </button>
+                    <button
+                        onClick={() => router.push('/profile')}
+                        className="text-xs uppercase tracking-widest border border-[#333] px-4 py-2 rounded-sm transition-all hover:border-[#bcfe00] hover:text-[#bcfe00]"
+                        style={{ color: '#adacac' }}
+                    >
+                        Profile
+                    </button>
+                </div>
+            </nav>
+
+            <div className="flex flex-col items-center py-8 px-4 gap-6">
+                {/* Mode selector */}
+                <div className="flex gap-2">
+                    {([
+                        { mode: 'player-vs-player', label: 'vs Player' },
+                        { mode: 'player-vs-ai',     label: 'vs AI' },
+                    ] as const).map(({ mode, label }) => {
+                        const active = gameMode === mode;
                         return (
-                            <div
-                                key={colIndex}
-                                onClick={() => onSquareClick(square)}
-                                className={`w-16 h-16 flex items-center justify-center text-4xl cursor-pointer ${squareColor} ${isSelected ? "bg-yellow-500" : ""
-                                    } ${isPossibleMove ? "bg-green-500" : ""}`}
+                            <button
+                                key={mode}
+                                onClick={() => setGameMode(mode)}
+                                className="px-5 py-2 text-xs uppercase tracking-widest rounded-sm transition-all active:scale-[0.97]"
+                                style={
+                                    active
+                                        ? { backgroundColor: '#bcfe00', color: '#000', fontWeight: 700 }
+                                        : { backgroundColor: '#191919', color: '#adacac', border: '1px solid #282828' }
+                                }
                             >
-                                {piece && (
-                                    <span className={piece.color === 'w' ? 'text-white' : 'text-black'}>
-                                        {pieceSymbols[piece.color === 'b' ? piece.type : piece.type.toUpperCase()]}
-                                    </span>
-                                )}
-                            </div>
+                                {label}
+                            </button>
                         );
-                    })
+                    })}
+                </div>
+
+                {/* AI level */}
+                {gameMode === 'player-vs-ai' && (
+                    <div className="flex items-center gap-3" style={{ color: '#adacac' }}>
+                        <span className="text-xs uppercase tracking-widest">AI Level</span>
+                        <input
+                            type="range" min="0" max="20" value={aiLevel}
+                            onChange={(e) => setAiLevel(parseInt(e.target.value))}
+                            className="w-36 accent-[#bcfe00]"
+                        />
+                        <span className="w-6 text-center text-sm font-bold" style={{ color: '#bcfe00' }}>{aiLevel}</span>
+                    </div>
+                )}
+
+                {/* Status */}
+                <div
+                    className="text-sm uppercase tracking-widest px-4 py-2 rounded-sm"
+                    style={{
+                        backgroundColor: isOver ? '#1a1a00' : '#191919',
+                        color: isOver ? '#bcfe00' : '#adacac',
+                        border: isOver ? '1px solid #bcfe00' : '1px solid #282828',
+                    }}
+                >
+                    {status}
+                </div>
+
+                {/* Board with coordinates */}
+                <div style={{ display: 'inline-flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex' }}>
+                        {/* Rank labels (8→1) */}
+                        <div style={{ display: 'flex', flexDirection: 'column', width: COORD }}>
+                            {RANKS.map((r) => (
+                                <div
+                                    key={r}
+                                    style={{ height: SQ, width: COORD, display: 'flex', alignItems: 'center', justifyContent: 'center', ...coordStyle }}
+                                >
+                                    {r}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Board */}
+                        <div
+                            style={{
+                                display: 'grid',
+                                gridTemplateColumns: `repeat(8, ${SQ}px)`,
+                                boxShadow: '0 0 40px rgba(0,0,0,0.8)',
+                                borderRadius: 2,
+                                overflow: 'hidden',
+                            }}
+                        >
+                            {board.map((row, rowIndex) =>
+                                row.map((piece, colIndex) => {
+                                    const square = (FILES[colIndex] + RANKS[rowIndex]) as Square;
+                                    const isLight = (rowIndex + colIndex) % 2 === 0;
+                                    const isSelected = selectedSquare === square;
+                                    const isPossible = possibleMoves.includes(square);
+                                    const isCapture = isPossible && !!piece;
+
+                                    const bg = isSelected
+                                        ? theme.selectedBg
+                                        : (isLight ? theme.light : theme.dark);
+
+                                    return (
+                                        <div
+                                            key={`${rowIndex}-${colIndex}`}
+                                            onClick={() => onSquareClick(square)}
+                                            style={{
+                                                width: SQ, height: SQ,
+                                                backgroundColor: bg,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                position: 'relative',
+                                                cursor: 'pointer',
+                                                userSelect: 'none',
+                                                fontSize: 36,
+                                            }}
+                                        >
+                                            {/* Move hint — empty square */}
+                                            {isPossible && !isCapture && (
+                                                <div style={{
+                                                    width: SQ * 0.3, height: SQ * 0.3,
+                                                    borderRadius: '50%',
+                                                    backgroundColor: 'rgba(0,0,0,0.22)',
+                                                    pointerEvents: 'none',
+                                                }} />
+                                            )}
+                                            {/* Move hint — capture square: ring in corners */}
+                                            {isCapture && (
+                                                <div style={{
+                                                    position: 'absolute', inset: 0,
+                                                    borderRadius: '50%',
+                                                    boxShadow: '0 0 0 5px rgba(0,0,0,0.28) inset',
+                                                    pointerEvents: 'none',
+                                                }} />
+                                            )}
+                                            {piece && (
+                                                <span style={{
+                                                    lineHeight: 1,
+                                                    zIndex: 1,
+                                                    ...(piece.color === 'w' ? activeSkin.whiteStyle : activeSkin.blackStyle),
+                                                }}>
+                                                    {pieceSymbols[piece.color === 'b' ? piece.type : piece.type.toUpperCase()]}
+                                                </span>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+
+                    {/* File labels (a→h), offset by rank column width */}
+                    <div style={{ display: 'flex', marginLeft: COORD }}>
+                        {FILES.map((f) => (
+                            <div
+                                key={f}
+                                style={{ width: SQ, height: COORD, display: 'flex', alignItems: 'center', justifyContent: 'center', ...coordStyle }}
+                            >
+                                {f}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Board theme picker */}
+                <div className="flex flex-col items-center gap-3">
+                    <span className="text-xs uppercase tracking-widest" style={{ color: '#555' }}>Board Style</span>
+                    <div className="flex gap-3">
+                        {BOARD_THEMES.map((t) => {
+                            const isActive = theme.id === t.id;
+                            return (
+                                <button
+                                    key={t.id}
+                                    onClick={() => setTheme(t)}
+                                    title={t.name}
+                                    style={{
+                                        padding: 2,
+                                        borderRadius: 4,
+                                        border: isActive ? '2px solid #bcfe00' : '2px solid transparent',
+                                        transition: 'border-color 0.15s',
+                                        cursor: 'pointer',
+                                        background: 'none',
+                                    }}
+                                >
+                                    {/* 2×2 checkerboard swatch */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', width: 28, height: 28, borderRadius: 2, overflow: 'hidden' }}>
+                                        <div style={{ backgroundColor: t.light }} />
+                                        <div style={{ backgroundColor: t.dark }} />
+                                        <div style={{ backgroundColor: t.dark }} />
+                                        <div style={{ backgroundColor: t.light }} />
+                                    </div>
+                                    <p className="text-center mt-1" style={{ fontSize: 9, color: isActive ? '#bcfe00' : '#555', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        {t.name}
+                                    </p>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Piece skin selector */}
+                <div className="flex flex-col items-center gap-3">
+                    <span className="text-xs uppercase tracking-widest" style={{ color: '#555' }}>Piece Skin</span>
+                    <div className="flex gap-3">
+                        {PIECE_SKINS.map((skin) => {
+                            const owned = skin.price === null || purchasedSkins.includes(skin.id);
+                            const isActive = activeSkin.id === skin.id;
+                            return (
+                                <button
+                                    key={skin.id}
+                                    onClick={() => owned && setActiveSkin(skin)}
+                                    title={owned ? skin.name : `${skin.name} — $${skin.price?.toFixed(2)} (unlock in Pro)`}
+                                    style={{
+                                        padding: 2,
+                                        borderRadius: 4,
+                                        border: isActive ? '2px solid #bcfe00' : '2px solid transparent',
+                                        transition: 'border-color 0.15s',
+                                        cursor: owned ? 'pointer' : 'not-allowed',
+                                        background: 'none',
+                                        opacity: owned ? 1 : 0.35,
+                                    }}
+                                >
+                                    <div style={{
+                                        width: 28, height: 28,
+                                        backgroundColor: '#191919',
+                                        borderRadius: 2,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: 20,
+                                        ...skin.whiteStyle,
+                                    }}>
+                                        ♔
+                                    </div>
+                                    <p className="text-center mt-1" style={{ fontSize: 9, color: isActive ? '#bcfe00' : '#555', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        {skin.price === null ? skin.name : owned ? skin.name : '🔒'}
+                                    </p>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex gap-3 flex-wrap justify-center">
+                    <button
+                        onClick={resetGame}
+                        className="px-5 py-2.5 text-xs uppercase tracking-widest rounded-sm font-bold transition-all active:scale-[0.97] hover:brightness-110"
+                        style={{ backgroundColor: '#bcfe00', color: '#000' }}
+                    >
+                        New Game
+                    </button>
+                    <button
+                        onClick={askCoach}
+                        disabled={coachLoading || isOver}
+                        className="px-5 py-2.5 text-xs uppercase tracking-widest rounded-sm font-medium transition-all active:scale-[0.97] border disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                        style={{ backgroundColor: '#191919', color: '#adacac', borderColor: '#282828' }}
+                        onMouseEnter={e => { if (!coachLoading && !isOver) { (e.currentTarget as HTMLButtonElement).style.borderColor = '#bcfe00'; (e.currentTarget as HTMLButtonElement).style.color = '#bcfe00'; } }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#282828'; (e.currentTarget as HTMLButtonElement).style.color = '#adacac'; }}
+                    >
+                        {coachLoading && <div className="spinner" style={{ width: 14, height: 14 }} />}
+                        {coachLoading ? 'Thinking…' : 'Ask Coach'}
+                    </button>
+                    {isOver && (
+                        <button
+                            onClick={analyzeGame}
+                            disabled={analysisLoading}
+                            className="px-5 py-2.5 text-xs uppercase tracking-widest rounded-sm font-medium transition-all active:scale-[0.97] border disabled:opacity-40 flex items-center gap-2"
+                            style={{ backgroundColor: '#191900', color: '#bcfe00', borderColor: '#bcfe00' }}
+                        >
+                            {analysisLoading && <div className="spinner" style={{ width: 14, height: 14 }} />}
+                            {analysisLoading ? 'Analyzing…' : 'Analyze Game'}
+                        </button>
+                    )}
+                </div>
+
+                {/* Coach panel */}
+                {coachAdvice && (
+                    <div
+                        className="w-full max-w-lg rounded-sm p-5 text-sm whitespace-pre-wrap animate-slide-up border"
+                        style={{ backgroundColor: '#0d0d0d', borderColor: '#282828', color: '#d4d4d4' }}
+                    >
+                        <p className="text-xs uppercase tracking-widest mb-3 font-medium" style={{ color: '#bcfe00' }}>
+                            Coach says
+                        </p>
+                        {coachAdvice}
+                    </div>
+                )}
+
+                {/* Analysis panel */}
+                {(analysis || analysisLoading) && (
+                    <div
+                        className="w-full max-w-lg rounded-sm p-5 text-sm whitespace-pre-wrap animate-slide-up border"
+                        style={{ backgroundColor: '#0d0d0d', borderColor: '#bcfe00', color: '#d4d4d4' }}
+                    >
+                        <p className="text-xs uppercase tracking-widest mb-3 font-medium" style={{ color: '#bcfe00' }}>
+                            Post-Game Analysis
+                        </p>
+                        {analysisLoading && !analysis && (
+                            <p style={{ color: '#555' }} className="italic">Reviewing your game…</p>
+                        )}
+                        {analysis}
+                    </div>
                 )}
             </div>
-            <div className="mt-4 text-xl">{status}</div>
-            <div className="flex gap-4 mt-4">
-                <button
-                    onClick={resetGame}
-                    className="px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white font-bold rounded"
-                >
-                    New Game
-                </button>
-                <button
-                    onClick={askCoach}
-                    disabled={coachLoading || game.isGameOver()}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-800 text-white font-bold rounded disabled:opacity-50"
-                >
-                    {coachLoading ? "Thinking..." : "Ask Coach"}
-                </button>
-            </div>
-            {coachAdvice && (
-                <div className="mt-4 max-w-xl w-full p-4 bg-gray-700 rounded-lg text-sm text-gray-200 whitespace-pre-wrap">
-                    <p className="text-purple-400 font-bold mb-1">Coach says:</p>
-                    {coachAdvice}
-                </div>
-            )}
         </div>
     );
 }
-
-

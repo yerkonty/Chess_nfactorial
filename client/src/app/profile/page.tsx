@@ -59,101 +59,129 @@ export default function ProfilePage() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-800">
-                <p className="text-white">Loading...</p>
+            <div className="flex items-center justify-center min-h-screen bg-black">
+                <div className="text-center">
+                    <div className="spinner mx-auto mb-3" />
+                    <p style={{ color: '#adacac' }} className="text-sm">Loading profile…</p>
+                </div>
             </div>
         );
     }
 
     const stats = computeStats(games);
+    const winPct = stats.total > 0 ? Math.round((stats.wins / stats.total) * 100) : 0;
+
+    const statCards = [
+        { label: 'Games', value: stats.total, color: '#ffffff' },
+        { label: 'Wins', value: stats.wins, color: '#bcfe00' },
+        { label: 'Losses', value: stats.losses, color: '#f87171' },
+        { label: 'Draws', value: stats.draws, color: '#facc15' },
+    ];
 
     return (
-        <div className="min-h-screen bg-gray-800 text-white p-8">
-            <div className="max-w-2xl mx-auto">
+        <div className="min-h-screen bg-black text-white">
+            {/* Nav */}
+            <nav className="border-b border-[#282828] px-6 py-4 flex items-center justify-between">
+                <button
+                    onClick={() => router.push('/')}
+                    className="text-sm uppercase tracking-widest transition-colors hover:text-[#bcfe00]"
+                    style={{ color: '#adacac' }}
+                >
+                    ← Back
+                </button>
+                <span className="text-lg font-bold tracking-tight">
+                    Chess<span style={{ color: '#bcfe00' }}>Mind</span>
+                </span>
+                <button
+                    onClick={handleLogout}
+                    className="text-sm uppercase tracking-widest border border-[#333] px-4 py-2 rounded-sm hover:border-red-500 hover:text-red-400 transition-all"
+                >
+                    Logout
+                </button>
+            </nav>
 
-                {/* Header */}
-                <div className="flex items-center justify-between mb-8">
-                    <button
-                        onClick={() => router.push('/')}
-                        className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded font-bold"
-                    >
-                        ← Back to Game
-                    </button>
-                    <button
-                        onClick={handleLogout}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded font-bold"
-                    >
-                        Logout
-                    </button>
-                </div>
-
+            <div className="max-w-2xl mx-auto px-6 py-10 animate-slide-up">
                 {/* User info */}
-                <div className="bg-gray-700 rounded-lg p-6 mb-6">
+                <div className="mb-8">
                     <h1 className="text-3xl font-bold mb-1">{user?.name || 'Player'}</h1>
-                    <p className="text-gray-400">{user?.email}</p>
+                    <p style={{ color: '#adacac' }} className="text-sm">{user?.email}</p>
                 </div>
 
-                {/* Stats */}
-                <div className="grid grid-cols-4 gap-4 mb-8">
-                    {[
-                        { label: 'Games', value: stats.total, color: 'text-white' },
-                        { label: 'Wins', value: stats.wins, color: 'text-green-400' },
-                        { label: 'Losses', value: stats.losses, color: 'text-red-400' },
-                        { label: 'Draws', value: stats.draws, color: 'text-yellow-400' },
-                    ].map(({ label, value, color }) => (
-                        <div key={label} className="bg-gray-700 rounded-lg p-4 text-center">
-                            <p className={`text-3xl font-bold ${color}`}>{value}</p>
-                            <p className="text-gray-400 text-sm mt-1">{label}</p>
+                {/* Stats grid */}
+                <div className="grid grid-cols-4 gap-3 mb-8">
+                    {statCards.map(({ label, value, color }) => (
+                        <div
+                            key={label}
+                            className="rounded-sm p-4 text-center border border-[#282828]"
+                            style={{ backgroundColor: '#191919' }}
+                        >
+                            <p className="text-3xl font-bold mb-1" style={{ color }}>{value}</p>
+                            <p className="text-xs uppercase tracking-widest" style={{ color: '#adacac' }}>{label}</p>
                         </div>
                     ))}
                 </div>
 
                 {/* Win rate bar */}
                 {stats.total > 0 && (
-                    <div className="bg-gray-700 rounded-lg p-4 mb-8">
-                        <div className="flex justify-between text-sm mb-2">
-                            <span className="text-green-400">Wins {Math.round((stats.wins / stats.total) * 100)}%</span>
-                            <span className="text-gray-400">Win Rate</span>
+                    <div className="rounded-sm p-4 mb-8 border border-[#282828]" style={{ backgroundColor: '#191919' }}>
+                        <div className="flex justify-between text-xs uppercase tracking-widest mb-3">
+                            <span style={{ color: '#bcfe00' }}>Wins {winPct}%</span>
+                            <span style={{ color: '#adacac' }}>Win Rate</span>
                         </div>
-                        <div className="h-3 bg-gray-600 rounded-full overflow-hidden">
+                        <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#282828' }}>
                             <div
-                                className="h-full bg-green-500 rounded-full transition-all"
-                                style={{ width: `${(stats.wins / stats.total) * 100}%` }}
+                                className="h-full rounded-full transition-all duration-700"
+                                style={{ width: `${winPct}%`, backgroundColor: '#bcfe00' }}
                             />
                         </div>
                     </div>
                 )}
 
                 {/* Game history */}
-                <h2 className="text-xl font-bold mb-4">Game History</h2>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-medium uppercase tracking-widest" style={{ color: '#adacac' }}>
+                        Game History
+                    </h2>
+                    <span className="text-xs" style={{ color: '#555' }}>
+                        {games.length} game{games.length !== 1 ? 's' : ''}
+                    </span>
+                </div>
+
                 {games.length === 0 ? (
-                    <p className="text-gray-400">No games played yet.</p>
+                    <p style={{ color: '#555' }} className="text-sm text-center py-12 border border-[#282828] rounded-sm">
+                        No games played yet. Go play one!
+                    </p>
                 ) : (
                     <div className="space-y-2">
-                        {games.map((game) => (
-                            <div
-                                key={game.$id}
-                                className="bg-gray-700 rounded-lg px-5 py-3 flex items-center justify-between"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <span className={`font-bold text-sm px-2 py-1 rounded ${
-                                        game.result === 'draw'
-                                            ? 'bg-yellow-600'
-                                            : game.result.includes('wins')
-                                            ? 'bg-green-700'
-                                            : 'bg-red-700'
-                                    }`}>
-                                        {game.result === 'draw' ? 'Draw' : game.result}
-                                    </span>
-                                    <span className="text-gray-400 text-sm capitalize">
-                                        {game.mode.replace(/-/g, ' ')}
+                        {games.map((game) => {
+                            const isDraw = game.result === 'draw';
+                            const isWin = game.result.includes('wins');
+                            const badgeColor = isDraw ? '#854d0e' : isWin ? '#166534' : '#7f1d1d';
+                            const badgeText = isDraw ? 'Draw' : game.result;
+
+                            return (
+                                <div
+                                    key={game.$id}
+                                    className="rounded-sm px-5 py-3 flex items-center justify-between border border-[#282828] hover:border-[#333] transition-colors"
+                                    style={{ backgroundColor: '#191919' }}
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <span
+                                            className="text-xs font-medium uppercase tracking-wider px-2 py-1 rounded-sm"
+                                            style={{ backgroundColor: badgeColor, color: '#fff' }}
+                                        >
+                                            {badgeText}
+                                        </span>
+                                        <span className="text-sm capitalize" style={{ color: '#adacac' }}>
+                                            {game.mode.replace(/-/g, ' ')}
+                                        </span>
+                                    </div>
+                                    <span className="text-xs" style={{ color: '#555' }}>
+                                        {new Date(game.$createdAt).toLocaleDateString()}
                                     </span>
                                 </div>
-                                <span className="text-gray-500 text-xs">
-                                    {new Date(game.$createdAt).toLocaleDateString()}
-                                </span>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>

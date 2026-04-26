@@ -1,25 +1,42 @@
-# ChessMind Progress
+# YChess Progress
 
-## Day 1 — Board & Rules
-- [x] Next.js project initialized
-- [x] chess.js integrated
-- [x] Chessboard UI rendered
-- [x] Move validation working
-- [x] Local 2-player mode working
+## Assignment
+**Goal:** Reach level "Великий" — build a creative chess platform, not just a copy.
+**Deadline:** 23:59, April 28
+**Live:** https://ychess.me
 
-## Day 2 — AI + Auth + DB
-- [x] Appwrite project connected
-- [x] Auth (email + Google) working
-- [x] Stockfish WASM integrated
-- [x] Game history saved to DB
-- [x] Player profile page
+---
 
-## Day 3 — Coach + Deploy
-- [x] AI Coach integrated (Groq — Llama 3.3 70B, free, streaming)
-- [ ] Multiplayer via Appwrite Realtime
-- [x] Deployed to Vercel (https://chessmind-zeta.vercel.app)
-- [x] Custom domain configured (ychess.me)
-- [x] README.md written
+## Level Status
 
-## Bonus
-- [ ] Multiplayer via Appwrite Realtime
+### ✅ Слабый — Done
+- [x] 8x8 board with movable pieces
+- [x] Basic UI
+
+### ✅ Средний — Done
+- [x] Full rules validation (castling, en passant, checkmate, stalemate)
+- [x] Local 2-player mode
+
+### ✅ Сильный — Done
+- [x] Stockfish AI opponent (adjustable difficulty 0–20)
+- [x] Game history saved to Appwrite DB
+- [x] Auth (email/password + Google OAuth)
+- [x] Player profile page with stats
+- [x] Deployed with custom domain (ychess.me)
+
+### 🎯 Великий — In Progress (deadline: Apr 28)
+- [x] AI Coach — real-time streaming advice via Groq (Llama 3.3 70B)
+- [ ] Multiplayer — play with a friend via shared link (Appwrite Realtime)
+- [x] Post-game AI analysis — coach reviews blunders after game ends
+- [x] Design overhaul — worldchess.com-inspired dark theme (black bg, #bcfe00 lime accent, DM Sans font)
+- [ ] Global leaderboard — top players ranking
+- [ ] Unique niche / creative angle
+- [ ] Monetization — "Upgrade to Pro" button or Stripe integration
+
+---
+
+## Deliverables
+- [ ] Link to live project: https://ychess.me
+- [ ] GitHub repo link
+- [ ] README.md with product description, target audience, value proposition
+- [ ] Submit form: https://nfactorialschool.typeform.com/to/HYVeKeEx
