@@ -35,7 +35,7 @@ export default function Home() {
 
   return (
     <main className="flex items-center justify-center min-h-screen bg-gray-800">
-      {user ? <Chessboard /> : <AuthForm />}
+      {user ? <Chessboard userId={user.$id} /> : <AuthForm />}
     </main>
   );
 }

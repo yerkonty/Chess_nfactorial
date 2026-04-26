@@ -1,8 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Chess } from "chess.js";
 import { type Square, type Piece } from "chess.js";
+import { databases } from "@/lib/appwrite";
+import { ID } from "appwrite";
+
+const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
+const COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_GAMES_COLLECTION_ID!;
 
 const pieceSymbols: { [key: string]: string } = {
     p: "♙",
@@ -21,7 +27,8 @@ const pieceSymbols: { [key: string]: string } = {
 
 type GameMode = "player-vs-player" | "player-vs-ai";
 
-export default function Chessboard() {
+export default function Chessboard({ userId }: { userId: string }) {
+    const router = useRouter();
     const [game, setGame] = useState<Chess>(new Chess());
     const [board, setBoard] = useState<(Piece | null)[][]>(game.board());
     const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
@@ -30,6 +37,8 @@ export default function Chessboard() {
     const [gameMode, setGameMode] = useState<GameMode>("player-vs-player");
     const [aiLevel, setAiLevel] = useState(5); // Default AI level (0-20)
     const stockfishWorker = useRef<Worker | null>(null);
+    const [coachAdvice, setCoachAdvice] = useState<string>("");
+    const [coachLoading, setCoachLoading] = useState(false);
 
     useEffect(() => {
         updateStatus();
@@ -67,13 +76,29 @@ export default function Chessboard() {
     }, [game.fen(), gameMode, aiLevel]);
 
 
+    async function saveGame(result: string) {
+        try {
+            await databases.createDocument(DATABASE_ID, COLLECTION_ID, ID.unique(), {
+                userId,
+                result,
+                mode: gameMode,
+                pgn: game.pgn(),
+            });
+        } catch (e) {
+            console.error("Failed to save game:", e);
+        }
+    }
+
     function updateStatus() {
         let newStatus = `Turn: ${game.turn() === "w" ? "White" : "Black"}`;
 
         if (game.isCheckmate()) {
-            newStatus = `Checkmate! ${game.turn() === "w" ? "Black" : "White"} wins.`;
+            const winner = game.turn() === "w" ? "Black" : "White";
+            newStatus = `Checkmate! ${winner} wins.`;
+            saveGame(`${winner} wins`);
         } else if (game.isDraw()) {
             newStatus = "Draw!";
+            saveGame("draw");
         }
 
         setStatus(newStatus);
@@ -108,6 +133,34 @@ export default function Chessboard() {
         }
     }
 
+    async function askCoach() {
+        setCoachLoading(true);
+        setCoachAdvice("");
+        try {
+            const res = await fetch("/api/coach", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    fen: game.fen(),
+                    turn: game.turn(),
+                    pgn: game.pgn(),
+                }),
+            });
+            if (!res.body) return;
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                setCoachAdvice((prev) => prev + decoder.decode(value));
+            }
+        } catch (e) {
+            setCoachAdvice("Coach unavailable. Check your API key.");
+        } finally {
+            setCoachLoading(false);
+        }
+    }
+
     function resetGame() {
         const newGame = new Chess();
         setGame(newGame);
@@ -119,7 +172,15 @@ export default function Chessboard() {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-gray-800 text-white">
-            <h1 className="text-4xl font-bold mb-4">ChessMind</h1>
+            <div className="flex items-center justify-between w-full max-w-lg mb-4">
+                <h1 className="text-4xl font-bold">ChessMind</h1>
+                <button
+                    onClick={() => router.push('/profile')}
+                    className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded font-bold text-sm"
+                >
+                    Profile
+                </button>
+            </div>
             <div className="flex gap-4 mb-4">
                 <button onClick={() => setGameMode("player-vs-player")} className={`px-4 py-2 rounded ${gameMode === 'player-vs-player' ? 'bg-blue-700' : 'bg-blue-500'}`}>
                     Player vs Player
@@ -169,12 +230,27 @@ export default function Chessboard() {
                 )}
             </div>
             <div className="mt-4 text-xl">{status}</div>
-            <button
-                onClick={resetGame}
-                className="mt-4 px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white font-bold rounded"
-            >
-                New Game
-            </button>
+            <div className="flex gap-4 mt-4">
+                <button
+                    onClick={resetGame}
+                    className="px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white font-bold rounded"
+                >
+                    New Game
+                </button>
+                <button
+                    onClick={askCoach}
+                    disabled={coachLoading || game.isGameOver()}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-800 text-white font-bold rounded disabled:opacity-50"
+                >
+                    {coachLoading ? "Thinking..." : "Ask Coach"}
+                </button>
+            </div>
+            {coachAdvice && (
+                <div className="mt-4 max-w-xl w-full p-4 bg-gray-700 rounded-lg text-sm text-gray-200 whitespace-pre-wrap">
+                    <p className="text-purple-400 font-bold mb-1">Coach says:</p>
+                    {coachAdvice}
+                </div>
+            )}
         </div>
     );
 }

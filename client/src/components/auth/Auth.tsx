@@ -109,6 +109,7 @@ export default function AuthForm() {
                         type="password"
                         autoComplete="current-password"
                         required
+                        minLength={8}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="w-full px-3 py-2 mt-1 text-gray-900 bg-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"

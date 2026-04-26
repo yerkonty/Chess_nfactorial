@@ -8,14 +8,14 @@
 - [x] Local 2-player mode working
 
 ## Day 2 — AI + Auth + DB
-- [ ] Appwrite project connected
-- [ ] Auth (email + Google) working
+- [x] Appwrite project connected
+- [x] Auth (email + Google) working
 - [x] Stockfish WASM integrated
-- [ ] Game history saved to DB
-- [ ] Player profile page
+- [x] Game history saved to DB
+- [x] Player profile page
 
 ## Day 3 — Coach + Deploy
-- [ ] Claude API AI Coach integrated
+- [x] AI Coach integrated (Groq — Llama 3.3 70B, free, streaming)
 - [ ] Multiplayer via Appwrite Realtime
 - [ ] Deployed to Vercel
 - [ ] Custom domain configured
