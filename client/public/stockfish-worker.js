@@ -5,11 +5,10 @@ self.onmessage = async (event) => {
 
     if (type === 'init') {
         if (!stockfish) {
-            const scriptUrl = new URL('/stockfish-18-lite.js', self.location.origin).href;
-            const { default: Stockfish } = await import(scriptUrl);
+            importScripts('/stockfish-18-lite.js');
             stockfish = await Stockfish();
 
-            stockfish.addEventListener('message', (line) => {
+            stockfish.addMessageListener((line) => {
                 self.postMessage({ type: 'engine-message', payload: line });
                 if (line.startsWith('bestmove')) {
                     const bestMove = line.split(' ')[1];
@@ -20,7 +19,7 @@ self.onmessage = async (event) => {
         self.postMessage({ type: 'init-complete' });
     } else if (type === 'uci') {
         if (stockfish) {
-            await stockfish.send(payload);
+            stockfish.postMessage(payload);
         }
     }
 };

@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react';
 import { account } from '@/lib/appwrite';
-import { AppwriteException } from 'appwrite';
+import { AppwriteException, OAuthProvider } from 'appwrite';
 
 export default function AuthForm() {
     const [email, setEmail] = useState('');
@@ -43,7 +43,7 @@ export default function AuthForm() {
 
     const handleGoogleLogin = () => {
         try {
-            account.createOAuth2Session('google', `${window.location.origin}/`, `${window.location.origin}/?error=true`);
+            account.createOAuth2Session(OAuthProvider.Google, `${window.location.origin}/`, `${window.location.origin}/?error=true`);
         } catch (e) {
             if (e instanceof AppwriteException) {
                 setError(e.message);

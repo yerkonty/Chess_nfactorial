@@ -42,7 +42,7 @@ export default function ProfilePage() {
                     Query.orderDesc('$createdAt'),
                     Query.limit(50),
                 ]);
-                setGames(res.documents as GameRecord[]);
+                setGames(res.documents as unknown as GameRecord[]);
             } catch {
                 router.push('/');
             } finally {

@@ -44,16 +44,18 @@ export default function Chessboard({ userId }: { userId: string }) {
         updateStatus();
 
         // Initialize the Stockfish worker
-        stockfishWorker.current = new Worker(new URL('../workers/stockfish.js', import.meta.url), {
-            type: 'module'
-        });
+        stockfishWorker.current = new Worker('/stockfish-worker.js');
         stockfishWorker.current.postMessage({ type: 'init' });
 
         stockfishWorker.current.onmessage = (event) => {
             const { type, payload } = event.data;
             if (type === 'best-move') {
                 if (payload) {
-                    game.move(payload, { sloppy: true });
+                    game.move({
+                        from: payload.slice(0, 2) as Square,
+                        to: payload.slice(2, 4) as Square,
+                        promotion: payload.length === 5 ? payload[4] : undefined,
+                    });
                     setBoard(game.board());
                     updateStatus();
                 }

@@ -17,6 +17,9 @@
 ## Day 3 — Coach + Deploy
 - [x] AI Coach integrated (Groq — Llama 3.3 70B, free, streaming)
 - [ ] Multiplayer via Appwrite Realtime
-- [ ] Deployed to Vercel
-- [ ] Custom domain configured
-- [ ] README.md written
+- [x] Deployed to Vercel (https://chessmind-zeta.vercel.app)
+- [x] Custom domain configured (ychess.me)
+- [x] README.md written
+
+## Bonus
+- [ ] Multiplayer via Appwrite Realtime
