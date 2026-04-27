@@ -44,10 +44,12 @@ const COORD = 20; // coordinate gutter px
 
 export default function Chessboard({
     userId,
+    userName,
     purchasedSkins,
     onSkinPurchased,
 }: {
     userId: string;
+    userName: string;
     purchasedSkins: string[];
     onSkinPurchased: (skinId: string) => void;
 }) {
@@ -183,7 +185,7 @@ export default function Chessboard({
     async function saveGame(result: string) {
         try {
             await databases.createDocument(DATABASE_ID, COLLECTION_ID, ID.unique(), {
-                userId, result, mode: gameMode, pgn: game.pgn(),
+                userId, userName, result, mode: gameMode, pgn: game.pgn(),
             });
         } catch (e) {
             console.error("Failed to save game:", e);
@@ -466,6 +468,20 @@ export default function Chessboard({
                         style={{ backgroundColor: '#bcfe00', color: '#000' }}
                     >
                         ⚡ Go Pro
+                    </button>
+                    <button
+                        onClick={() => router.push('/play')}
+                        className="text-xs uppercase tracking-widest border border-[#333] px-4 py-2 rounded-sm transition-all hover:border-[#bcfe00] hover:text-[#bcfe00]"
+                        style={{ color: '#adacac' }}
+                    >
+                        Multiplayer
+                    </button>
+                    <button
+                        onClick={() => router.push('/leaderboard')}
+                        className="text-xs uppercase tracking-widest border border-[#333] px-4 py-2 rounded-sm transition-all hover:border-[#bcfe00] hover:text-[#bcfe00]"
+                        style={{ color: '#adacac' }}
+                    >
+                        Leaderboard
                     </button>
                     <button
                         onClick={() => router.push('/profile')}

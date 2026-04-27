@@ -77,6 +77,7 @@ export default function Home() {
       {user
         ? <Chessboard
             userId={user.$id}
+            userName={user.name || 'Player'}
             purchasedSkins={purchasedSkins}
             onSkinPurchased={addPurchasedSkin}
           />

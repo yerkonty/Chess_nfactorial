@@ -24,14 +24,16 @@
 - [x] Player profile page with stats
 - [x] Deployed with custom domain (ychess.me)
 
-### 🎯 Великий — In Progress (deadline: Apr 28)
+### ✅ Великий — Done
 - [x] AI Coach — real-time streaming advice via Groq (Llama 3.3 70B)
-- [ ] Multiplayer — play with a friend via shared link (Appwrite Realtime)
 - [x] Post-game AI analysis — coach reviews blunders after game ends
 - [x] Design overhaul — worldchess.com-inspired dark theme (black bg, #bcfe00 lime accent, DM Sans font)
-- [ ] Global leaderboard — top players ranking
+- [x] Global leaderboard — 20 Kazakhstan cities + real players, ranked by wins
 - [x] Unique niche / creative angle — board themes (5), purchasable CSS piece skins (Neon/Gold/Crystal)
 - [x] Monetization — Stripe integration with 3 purchasable piece skins ($2.99 each) + Pro modal
+- [x] Drag-and-drop pieces with floating animation + Web Audio sound effects
+- [x] Pawn promotion dialog, king-in-check highlight
+- [ ] Multiplayer — skipped (time constraint)
 
 ---
 
