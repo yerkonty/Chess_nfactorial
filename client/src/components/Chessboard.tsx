@@ -75,6 +75,7 @@ export default function Chessboard({
     const isDraggingRef = useRef(false);
     const justDragged = useRef(false);
     const [dragState, setDragState] = useState<{ square: Square; piece: Piece; x: number; y: number } | null>(null);
+    const [promotionPending, setPromotionPending] = useState<{ from: Square; to: Square } | null>(null);
 
     useEffect(() => {
         updateStatus();
@@ -126,19 +127,30 @@ export default function Chessboard({
                         const toSquare = (FILES[col] + RANKS[row]) as Square;
                         const from = potentialDrag.current.square;
                         if (toSquare !== from) {
-                            try {
-                                const move = game.move({ from, to: toSquare, promotion: 'q' });
-                                if (move) {
-                                    setBoard(game.board());
-                                    setLastMove({ from, to: toSquare });
-                                    setMoveCount(c => c + 1);
-                                    updateStatus();
-                                    if (game.isGameOver()) playGameOver();
-                                    else if (game.inCheck()) playCheck();
-                                    else if (move.captured) playCapture();
-                                    else playMove();
+                            const movingPiece = game.get(from);
+                            const isPromo = movingPiece?.type === 'p' && (toSquare[1] === '8' || toSquare[1] === '1');
+                            if (isPromo) {
+                                const legal = game.moves({ square: from, verbose: true });
+                                if (legal.some((m: { to: string }) => m.to === toSquare)) {
+                                    setPromotionPending({ from, to: toSquare });
+                                    setSelectedSquare(null);
+                                    setPossibleMoves([]);
                                 }
-                            } catch { /* invalid drop */ }
+                            } else {
+                                try {
+                                    const move = game.move({ from, to: toSquare, promotion: 'q' });
+                                    if (move) {
+                                        setBoard(game.board());
+                                        setLastMove({ from, to: toSquare });
+                                        setMoveCount(c => c + 1);
+                                        updateStatus();
+                                        if (game.isGameOver()) playGameOver();
+                                        else if (game.inCheck()) playCheck();
+                                        else if (move.captured) playCapture();
+                                        else playMove();
+                                    }
+                                } catch { /* invalid drop */ }
+                            }
                         }
                     }
                 }
@@ -209,23 +221,19 @@ export default function Chessboard({
 
     function onSquareClick(square: Square) {
         if (justDragged.current) { justDragged.current = false; return; }
+        if (promotionPending) return;
         if (game.isGameOver() || (gameMode === 'player-vs-ai' && game.turn() === 'b')) return;
 
         if (selectedSquare) {
             const from = selectedSquare;
-            try {
-                const move = game.move({ from, to: square, promotion: "q" });
-                if (move) {
-                    setBoard(game.board());
-                    setLastMove({ from, to: square });
-                    setMoveCount(c => c + 1);
-                    updateStatus();
-                    if (game.isGameOver()) playGameOver();
-                    else if (game.inCheck()) playCheck();
-                    else if (move.captured) playCapture();
-                    else playMove();
+            const legalDests = game.moves({ square: from, verbose: true }).map(m => m.to);
+            if (legalDests.includes(square)) {
+                if (isPawnPromotion(from, square)) {
+                    setPromotionPending({ from, to: square });
+                } else {
+                    applyMove(from, square);
                 }
-            } catch { /* invalid move */ }
+            }
             setSelectedSquare(null);
             setPossibleMoves([]);
         } else {
@@ -285,6 +293,34 @@ export default function Chessboard({
         }
     }
 
+    function isPawnPromotion(from: Square, to: Square): boolean {
+        const p = game.get(from);
+        return p?.type === 'p' && (to[1] === '8' || to[1] === '1');
+    }
+
+    function applyMove(from: Square, to: Square, promotion: 'q' | 'r' | 'b' | 'n' = 'q') {
+        try {
+            const move = game.move({ from, to, promotion });
+            if (move) {
+                setBoard(game.board());
+                setLastMove({ from, to });
+                setMoveCount(c => c + 1);
+                updateStatus();
+                if (game.isGameOver()) playGameOver();
+                else if (game.inCheck()) playCheck();
+                else if (move.captured) playCapture();
+                else playMove();
+            }
+        } catch { /* invalid */ }
+    }
+
+    function completePromotion(piece: 'q' | 'r' | 'b' | 'n') {
+        if (!promotionPending) return;
+        const { from, to } = promotionPending;
+        setPromotionPending(null);
+        applyMove(from, to, piece);
+    }
+
     function resetGame() {
         const newGame = new Chess();
         setGame(newGame);
@@ -292,6 +328,7 @@ export default function Chessboard({
         setSelectedSquare(null);
         setPossibleMoves([]);
         setLastMove(null);
+        setPromotionPending(null);
         setAnalysis("");
         setGameResult("");
         setCoachAdvice("");
@@ -319,6 +356,26 @@ export default function Chessboard({
     const isOver = game.isGameOver();
     const coordStyle = { color: theme.labelColor, fontSize: 11, fontWeight: 700, lineHeight: 1, userSelect: 'none' as const };
 
+    // Find king square for check highlight
+    const kingInCheckSq: Square | null = game.inCheck() ? (() => {
+        const turn = game.turn();
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const sq = (FILES[c] + RANKS[r]) as Square;
+                const p = game.get(sq);
+                if (p?.type === 'k' && p.color === turn) return sq;
+            }
+        }
+        return null;
+    })() : null;
+
+    const PROMO_PIECES = [
+        { key: 'q' as const, label: 'Queen'  },
+        { key: 'r' as const, label: 'Rook'   },
+        { key: 'b' as const, label: 'Bishop' },
+        { key: 'n' as const, label: 'Knight' },
+    ];
+
     return (
         <div className="min-h-screen bg-black text-white">
             {/* Floating drag piece */}
@@ -341,6 +398,48 @@ export default function Chessboard({
                     ...(dragState.piece.color === 'w' ? activeSkin.whiteStyle : activeSkin.blackStyle),
                 }}>
                     {pieceSymbols[dragState.piece.color === 'b' ? dragState.piece.type : dragState.piece.type.toUpperCase()]}
+                </div>
+            )}
+
+            {/* Pawn promotion dialog */}
+            {promotionPending && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(3px)' }}
+                >
+                    <div
+                        className="rounded-sm animate-slide-up"
+                        style={{ backgroundColor: '#111', border: '1px solid #282828' }}
+                    >
+                        <p className="text-xs uppercase tracking-widest px-6 pt-5 pb-4" style={{ color: '#adacac' }}>
+                            Promote pawn to
+                        </p>
+                        <div className="flex gap-2 px-5 pb-5">
+                            {PROMO_PIECES.map(({ key, label }) => {
+                                const color = game.turn();
+                                const symbol = pieceSymbols[color === 'w' ? key.toUpperCase() : key];
+                                return (
+                                    <button
+                                        key={key}
+                                        onClick={() => completePromotion(key)}
+                                        title={label}
+                                        className="flex flex-col items-center gap-1 rounded-sm border border-[#333] hover:border-[#bcfe00] transition-all active:scale-[0.96]"
+                                        style={{ width: 60, height: 72, backgroundColor: '#191919', fontSize: 36 }}
+                                    >
+                                        <span
+                                            className="mt-2"
+                                            style={color === 'w' ? activeSkin.whiteStyle : activeSkin.blackStyle}
+                                        >
+                                            {symbol}
+                                        </span>
+                                        <span className="text-[9px] uppercase tracking-widest" style={{ color: '#555' }}>
+                                            {label}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -485,6 +584,14 @@ export default function Chessboard({
                                                 fontSize: 36,
                                             }}
                                         >
+                                            {/* King in check highlight */}
+                                            {square === kingInCheckSq && (
+                                                <div style={{
+                                                    position: 'absolute', inset: 0,
+                                                    background: 'radial-gradient(circle at center, rgba(255,30,30,0.75) 0%, rgba(220,0,0,0.25) 60%, transparent 100%)',
+                                                    pointerEvents: 'none',
+                                                }} />
+                                            )}
                                             {/* Last-move highlight */}
                                             {isLastMoveSquare && (
                                                 <div style={{
