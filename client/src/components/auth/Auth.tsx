@@ -55,7 +55,7 @@ export default function AuthForm() {
             {/* Logo */}
             <div className="mb-10 text-center">
                 <h1 className="text-4xl font-bold tracking-tight">
-                    Chess<span style={{ color: '#bcfe00' }}>Mind</span>
+                    Y<span style={{ color: '#bcfe00' }}>Chess</span>
                 </h1>
                 <p className="text-sm mt-2" style={{ color: '#adacac' }}>
                     AI-powered chess coaching

@@ -9,7 +9,7 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "ChessMind — Play & Learn Chess",
+  title: "YChess — Play & Learn Chess",
   description: "AI-powered chess with real-time coaching and post-game analysis.",
 };
 

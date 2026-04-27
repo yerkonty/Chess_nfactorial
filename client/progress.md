@@ -30,13 +30,13 @@
 - [x] Post-game AI analysis — coach reviews blunders after game ends
 - [x] Design overhaul — worldchess.com-inspired dark theme (black bg, #bcfe00 lime accent, DM Sans font)
 - [ ] Global leaderboard — top players ranking
-- [ ] Unique niche / creative angle
-- [ ] Monetization — "Upgrade to Pro" button or Stripe integration
+- [x] Unique niche / creative angle — board themes (5), purchasable CSS piece skins (Neon/Gold/Crystal)
+- [x] Monetization — Stripe integration with 3 purchasable piece skins ($2.99 each) + Pro modal
 
 ---
 
 ## Deliverables
-- [ ] Link to live project: https://ychess.me
-- [ ] GitHub repo link
+- [x] Link to live project: https://ychess.me
+- [x] GitHub repo link
 - [ ] README.md with product description, target audience, value proposition
 - [ ] Submit form: https://nfactorialschool.typeform.com/to/HYVeKeEx

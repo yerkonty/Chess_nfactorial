@@ -90,7 +90,7 @@ export default function ProfilePage() {
                     ← Back
                 </button>
                 <span className="text-lg font-bold tracking-tight">
-                    Chess<span style={{ color: '#bcfe00' }}>Mind</span>
+                    Y<span style={{ color: '#bcfe00' }}>Chess</span>
                 </span>
                 <button
                     onClick={handleLogout}

@@ -8,6 +8,7 @@ import { databases } from "@/lib/appwrite";
 import { ID } from "appwrite";
 import ProModal from "./ProModal";
 import { PIECE_SKINS, type PieceSkin } from "@/lib/skins";
+import { playMove, playCapture, playCheck, playGameOver } from "@/lib/sounds";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_GAMES_COLLECTION_ID!;
@@ -67,6 +68,13 @@ export default function Chessboard({
     const [gameResult, setGameResult] = useState<string>("");
     const [showPro, setShowPro] = useState(false);
     const [activeSkin, setActiveSkin] = useState<PieceSkin>(PIECE_SKINS[0]);
+    const [lastMove, setLastMove] = useState<{ from: Square; to: Square } | null>(null);
+    const [moveCount, setMoveCount] = useState(0);
+    const boardRef = useRef<HTMLDivElement | null>(null);
+    const potentialDrag = useRef<{ square: Square; piece: Piece; startX: number; startY: number } | null>(null);
+    const isDraggingRef = useRef(false);
+    const justDragged = useRef(false);
+    const [dragState, setDragState] = useState<{ square: Square; piece: Piece; x: number; y: number } | null>(null);
 
     useEffect(() => {
         updateStatus();
@@ -75,17 +83,81 @@ export default function Chessboard({
         stockfishWorker.current.onmessage = (event) => {
             const { type, payload } = event.data;
             if (type === 'best-move' && payload) {
-                game.move({
-                    from: payload.slice(0, 2) as Square,
-                    to: payload.slice(2, 4) as Square,
-                    promotion: payload.length === 5 ? payload[4] : undefined,
-                });
+                const from = payload.slice(0, 2) as Square;
+                const to   = payload.slice(2, 4) as Square;
+                const aiMove = game.move({ from, to, promotion: payload.length === 5 ? payload[4] : undefined });
                 setBoard(game.board());
+                setLastMove({ from, to });
+                setMoveCount(c => c + 1);
                 updateStatus();
+                if (game.isGameOver()) playGameOver();
+                else if (game.inCheck()) playCheck();
+                else if (aiMove?.captured) playCapture();
+                else playMove();
             }
         };
         return () => { stockfishWorker.current?.terminate(); };
     }, []);
+
+    useEffect(() => {
+        const onMouseMove = (e: MouseEvent) => {
+            if (!potentialDrag.current) return;
+            const dx = e.clientX - potentialDrag.current.startX;
+            const dy = e.clientY - potentialDrag.current.startY;
+            if (!isDraggingRef.current && Math.hypot(dx, dy) > 5) {
+                isDraggingRef.current = true;
+                document.body.style.cursor = 'grabbing';
+            }
+            if (isDraggingRef.current) {
+                const { square, piece } = potentialDrag.current;
+                setDragState({ square, piece, x: e.clientX, y: e.clientY });
+            }
+        };
+
+        const onMouseUp = (e: MouseEvent) => {
+            if (potentialDrag.current && isDraggingRef.current) {
+                justDragged.current = true;
+                const boardEl = boardRef.current;
+                if (boardEl) {
+                    const rect = boardEl.getBoundingClientRect();
+                    const col = Math.floor((e.clientX - rect.left) / SQ);
+                    const row = Math.floor((e.clientY - rect.top) / SQ);
+                    if (col >= 0 && col < 8 && row >= 0 && row < 8) {
+                        const toSquare = (FILES[col] + RANKS[row]) as Square;
+                        const from = potentialDrag.current.square;
+                        if (toSquare !== from) {
+                            try {
+                                const move = game.move({ from, to: toSquare, promotion: 'q' });
+                                if (move) {
+                                    setBoard(game.board());
+                                    setLastMove({ from, to: toSquare });
+                                    setMoveCount(c => c + 1);
+                                    updateStatus();
+                                    if (game.isGameOver()) playGameOver();
+                                    else if (game.inCheck()) playCheck();
+                                    else if (move.captured) playCapture();
+                                    else playMove();
+                                }
+                            } catch { /* invalid drop */ }
+                        }
+                    }
+                }
+                setSelectedSquare(null);
+                setPossibleMoves([]);
+            }
+            document.body.style.cursor = '';
+            potentialDrag.current = null;
+            isDraggingRef.current = false;
+            setDragState(null);
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+    }, []); // closes over mutable game ref and stable setState functions
 
     useEffect(() => {
         if (gameMode === 'player-vs-ai' && game.turn() === 'b') {
@@ -123,15 +195,35 @@ export default function Chessboard({
         setStatus(newStatus);
     }
 
+    function handlePieceMouseDown(e: React.MouseEvent, square: Square, piece: Piece) {
+        if (game.isGameOver() || (gameMode === 'player-vs-ai' && game.turn() === 'b')) return;
+        if (piece.color !== game.turn()) return;
+        e.preventDefault();
+        potentialDrag.current = { square, piece, startX: e.clientX, startY: e.clientY };
+        const moves = game.moves({ square, verbose: true });
+        if (moves.length > 0) {
+            setSelectedSquare(square);
+            setPossibleMoves(moves.map(m => m.to));
+        }
+    }
+
     function onSquareClick(square: Square) {
+        if (justDragged.current) { justDragged.current = false; return; }
         if (game.isGameOver() || (gameMode === 'player-vs-ai' && game.turn() === 'b')) return;
 
         if (selectedSquare) {
+            const from = selectedSquare;
             try {
-                const move = game.move({ from: selectedSquare, to: square, promotion: "q" });
+                const move = game.move({ from, to: square, promotion: "q" });
                 if (move) {
                     setBoard(game.board());
+                    setLastMove({ from, to: square });
+                    setMoveCount(c => c + 1);
                     updateStatus();
+                    if (game.isGameOver()) playGameOver();
+                    else if (game.inCheck()) playCheck();
+                    else if (move.captured) playCapture();
+                    else playMove();
                 }
             } catch { /* invalid move */ }
             setSelectedSquare(null);
@@ -199,6 +291,7 @@ export default function Chessboard({
         setBoard(newGame.board());
         setSelectedSquare(null);
         setPossibleMoves([]);
+        setLastMove(null);
         setAnalysis("");
         setGameResult("");
         setCoachAdvice("");
@@ -228,6 +321,29 @@ export default function Chessboard({
 
     return (
         <div className="min-h-screen bg-black text-white">
+            {/* Floating drag piece */}
+            {dragState && (
+                <div style={{
+                    position: 'fixed',
+                    left: dragState.x - SQ * 0.6,
+                    top: dragState.y - SQ * 0.6,
+                    width: SQ * 1.2,
+                    height: SQ * 1.2,
+                    fontSize: SQ * 0.9,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    pointerEvents: 'none',
+                    zIndex: 9999,
+                    lineHeight: 1,
+                    filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.75))',
+                    transform: 'scale(1.18)',
+                    ...(dragState.piece.color === 'w' ? activeSkin.whiteStyle : activeSkin.blackStyle),
+                }}>
+                    {pieceSymbols[dragState.piece.color === 'b' ? dragState.piece.type : dragState.piece.type.toUpperCase()]}
+                </div>
+            )}
+
             {showPro && (
                 <ProModal
                     onClose={() => setShowPro(false)}
@@ -242,7 +358,7 @@ export default function Chessboard({
             {/* Nav */}
             <nav className="border-b border-[#1a1a1a] px-6 py-4 flex items-center justify-between">
                 <span className="text-xl font-bold tracking-tight">
-                    Chess<span style={{ color: '#bcfe00' }}>Mind</span>
+                    Y<span style={{ color: '#bcfe00' }}>Chess</span>
                 </span>
                 <div className="flex items-center gap-3">
                     <button
@@ -329,6 +445,7 @@ export default function Chessboard({
 
                         {/* Board */}
                         <div
+                            ref={boardRef}
                             style={{
                                 display: 'grid',
                                 gridTemplateColumns: `repeat(8, ${SQ}px)`,
@@ -344,6 +461,8 @@ export default function Chessboard({
                                     const isSelected = selectedSquare === square;
                                     const isPossible = possibleMoves.includes(square);
                                     const isCapture = isPossible && !!piece;
+                                    const isLastMoveSquare = !!lastMove && (square === lastMove.from || square === lastMove.to);
+                                    const isLanding = !!lastMove && square === lastMove.to;
 
                                     const bg = isSelected
                                         ? theme.selectedBg
@@ -352,6 +471,7 @@ export default function Chessboard({
                                     return (
                                         <div
                                             key={`${rowIndex}-${colIndex}`}
+                                            className="board-square"
                                             onClick={() => onSquareClick(square)}
                                             style={{
                                                 width: SQ, height: SQ,
@@ -365,6 +485,14 @@ export default function Chessboard({
                                                 fontSize: 36,
                                             }}
                                         >
+                                            {/* Last-move highlight */}
+                                            {isLastMoveSquare && (
+                                                <div style={{
+                                                    position: 'absolute', inset: 0,
+                                                    backgroundColor: 'rgba(205, 210, 56, 0.38)',
+                                                    pointerEvents: 'none',
+                                                }} />
+                                            )}
                                             {/* Move hint — empty square */}
                                             {isPossible && !isCapture && (
                                                 <div style={{
@@ -374,7 +502,7 @@ export default function Chessboard({
                                                     pointerEvents: 'none',
                                                 }} />
                                             )}
-                                            {/* Move hint — capture square: ring in corners */}
+                                            {/* Move hint — capture square: ring */}
                                             {isCapture && (
                                                 <div style={{
                                                     position: 'absolute', inset: 0,
@@ -384,11 +512,17 @@ export default function Chessboard({
                                                 }} />
                                             )}
                                             {piece && (
-                                                <span style={{
-                                                    lineHeight: 1,
-                                                    zIndex: 1,
-                                                    ...(piece.color === 'w' ? activeSkin.whiteStyle : activeSkin.blackStyle),
-                                                }}>
+                                                <span
+                                                    key={isLanding ? moveCount : undefined}
+                                                    className={`piece-span${isLanding ? ' piece-land' : ''}`}
+                                                    onMouseDown={(e) => handlePieceMouseDown(e, square, piece)}
+                                                    style={{
+                                                        zIndex: 1,
+                                                        cursor: 'grab',
+                                                        opacity: dragState?.square === square ? 0.15 : 1,
+                                                        ...(piece.color === 'w' ? activeSkin.whiteStyle : activeSkin.blackStyle),
+                                                    }}
+                                                >
                                                     {pieceSymbols[piece.color === 'b' ? piece.type : piece.type.toUpperCase()]}
                                                 </span>
                                             )}

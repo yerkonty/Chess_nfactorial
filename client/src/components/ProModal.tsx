@@ -67,7 +67,7 @@ export default function ProModal({
                     <div className="flex items-start justify-between">
                         <div>
                             <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#bcfe00' }}>
-                                ⚡ ChessMind Pro
+                                ⚡ YChess Pro
                             </p>
                             <h2 className="text-2xl font-bold">Unlock your full potential</h2>
                         </div>

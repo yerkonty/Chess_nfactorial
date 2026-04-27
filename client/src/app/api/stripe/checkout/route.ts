@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
                     price_data: {
                         currency: 'usd',
                         product_data: {
-                            name: `ChessMind — ${skin.name} Piece Skin`,
+                            name: `YChess — ${skin.name} Piece Skin`,
                             description: skin.description,
                         },
                         unit_amount: Math.round(skin.price * 100),
