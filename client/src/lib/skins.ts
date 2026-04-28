@@ -22,8 +22,9 @@ export const PIECE_SKINS: PieceSkin[] = [
             textShadow: '0 1px 3px rgba(0,0,0,0.85)',
         },
         blackStyle: {
-            color: '#111111',
-            textShadow: '0 1px 2px rgba(255,255,255,0.25)',
+            color: '#2d2d2d',
+            textShadow: '0 1px 0 #000000, 0 2px 3px rgba(0,0,0,0.4)',
+            WebkitTextStroke: '0.7px #1a1a1a',
         },
     },
     {

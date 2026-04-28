@@ -1,18 +1,28 @@
 # YChess
 
-A full-stack chess web app with AI opponent, AI coaching, and game history tracking.
+A full-stack chess platform with AI opponent, AI coaching, multiplayer rooms, and replayable game history.
 
 **Live:** [ychess.me](https://ychess.me)
 
-## Features
+## Highlights
 
-- **Play Chess** — fully validated moves with legal move highlighting
-- **Player vs Player** — local 2-player mode
-- **Player vs AI** — Stockfish 18 engine with adjustable difficulty (0–20)
-- **AI Coach** — ask for real-time coaching advice powered by Llama 3.3 70B via Groq
-- **Authentication** — email/password and Google OAuth via Appwrite
-- **Game History** — all games saved to database with result, mode, and PGN
-- **Player Profile** — view stats (wins, losses, draws) and full game history
+- **Play Chess** — legal-move validation, move hints, last-move and check highlights
+- **Player vs Player** — local two-player mode
+- **Multiplayer Rooms** — share a room link and play live with timers
+- **Player vs AI** — Stockfish 18 engine with adjustable difficulty (1–20)
+- **AI Coach** — on-demand coaching powered by Llama 3.3 70B via Groq
+- **Post-Game Replay** — full move list, board snapshots, and AI analysis on demand
+- **Game History & Stats** — wins/losses/draws, recent games, and replay links
+- **Skins & Pro** — piece skins and upgrade flow
+- **Auth** — email/password and Google OAuth via Appwrite
+
+## Navigation Guide
+
+- **Home**: start a new game and select mode
+- **Play**: multiplayer lobby; open or join a room
+- **Profile**: stats and game history; open any game to replay
+- **Leaderboard**: top players list
+- **Replay**: move-by-move viewer with AI analysis button
 
 ## Tech Stack
 
@@ -23,6 +33,7 @@ A full-stack chess web app with AI opponent, AI coaching, and game history track
 | AI Opponent | Stockfish 18 WASM (Web Worker) |
 | AI Coach | Groq API — Llama 3.3 70B |
 | Auth & Database | Appwrite |
+| Payments | Stripe |
 | Deployment | Vercel |
 
 ## Getting Started
@@ -35,9 +46,9 @@ cd Chess_project/client
 npm install
 ```
 
-### 2. Set up environment variables
+### 2. Environment variables
 
-Create a `.env.local` file in the `client/` directory:
+Create a `.env.local` file in `client/`:
 
 ```env
 NEXT_PUBLIC_APPWRITE_ENDPOINT="https://fra.cloud.appwrite.io/v1"
@@ -48,20 +59,38 @@ NEXT_PUBLIC_APPWRITE_GAMES_COLLECTION_ID="games"
 GROQ_API_KEY="your-groq-api-key"
 ```
 
-### 3. Set up Appwrite
+If you enable payments, add your Stripe keys used in the `/api/stripe/*` routes.
 
-- Create a project at [appwrite.io](https://appwrite.io)
-- Enable **Email/Password** and **Google OAuth** authentication
-- Create a database with a `games` collection with these columns:
-  - `userId` (string)
-  - `result` (string)
-  - `mode` (string)
-  - `pgn` (string)
-- Add `localhost` as a web platform in Settings → Platforms
+### 3. Appwrite setup
 
-### 4. Get a free Groq API key
+1) Create a project at [appwrite.io](https://appwrite.io)
+2) Enable **Email/Password** and **Google OAuth** authentication
+3) Add your web platform(s) in Settings → Platforms (include localhost for dev)
+4) Create a database and collections:
 
-Sign up at [console.groq.com](https://console.groq.com) — no credit card required.
+**games** collection
+- `userId` (string)
+- `userName` (string)
+- `result` (string)
+- `mode` (string)
+- `pgn` (string)
+
+**rooms** collection (multiplayer)
+- `fen` (string)
+- `pgn` (string, optional)
+- `status` (string: waiting|active|finished)
+- `player1Id` (string), `player1Name` (string)
+- `player2Id` (string, optional), `player2Name` (string, optional)
+- `turn` (string)
+- `lastMove` (string, optional)
+- `whiteTime` (number, optional), `blackTime` (number, optional)
+- `timerDuration` (number, optional)
+- `lastMoveAt` (datetime, optional)
+- `result` (string, optional)
+
+### 4. Groq API key
+
+Sign up at [console.groq.com](https://console.groq.com) and create a key.
 
 ### 5. Run the app
 
@@ -71,24 +100,38 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Deployment (Vercel)
+
+1) Push the repo to GitHub
+2) Import the `client/` directory in Vercel
+3) Add the same environment variables from `.env.local`
+4) Deploy
+
 ## Project Structure
 
 ```
 client/
 ├── public/
-│   ├── stockfish-18-lite.js     # Stockfish engine
+│   ├── stockfish-18-lite.js
 │   ├── stockfish-18-lite.wasm
-│   └── stockfish-worker.js      # Web Worker for Stockfish
+│   └── stockfish-worker.js
 ├── src/
 │   ├── app/
-│   │   ├── api/coach/route.ts   # Groq AI Coach API route
-│   │   ├── profile/page.tsx     # Player profile page
-│   │   └── page.tsx             # Home page
+│   │   ├── api/coach/route.ts
+│   │   ├── api/analyze/route.ts
+│   │   ├── api/stockfish/route.ts
+│   │   ├── play/[id]/page.tsx
+│   │   ├── profile/page.tsx
+│   │   ├── profile/game/[id]/page.tsx
+│   │   └── page.tsx
 │   ├── components/
-│   │   ├── Chessboard.tsx       # Main game component
-│   │   └── auth/Auth.tsx        # Auth form
+│   │   ├── Chessboard.tsx
+│   │   ├── ProModal.tsx
+│   │   └── auth/Auth.tsx
 │   └── lib/
-│       └── appwrite.ts          # Appwrite client
+│       ├── appwrite.ts
+│       ├── chessAI.ts
+│       └── skins.ts
 ```
 
 ## License

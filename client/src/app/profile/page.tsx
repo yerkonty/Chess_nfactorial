@@ -72,10 +72,10 @@ export default function ProfilePage() {
     const winPct = stats.total > 0 ? Math.round((stats.wins / stats.total) * 100) : 0;
 
     const statCards = [
-        { label: 'Games',  value: stats.total,  color: '#4A2C0A' },
-        { label: 'Wins',   value: stats.wins,   color: '#D4722A' },
+        { label: 'Games', value: stats.total, color: '#4A2C0A' },
+        { label: 'Wins', value: stats.wins, color: '#D4722A' },
         { label: 'Losses', value: stats.losses, color: '#B91C1C' },
-        { label: 'Draws',  value: stats.draws,  color: '#92400E' },
+        { label: 'Draws', value: stats.draws, color: '#92400E' },
     ];
 
     return (
@@ -182,9 +182,9 @@ export default function ProfilePage() {
                 ) : (
                     <div className="space-y-2">
                         {games.map((game) => {
-                            const isDraw   = game.result === 'draw';
-                            const isWin    = game.result.includes('wins');
-                            const badgeBg  = isDraw ? '#F7EDDA' : isWin ? '#D4722A' : '#FEE2E2';
+                            const isDraw = game.result === 'draw';
+                            const isWin = game.result.includes('wins');
+                            const badgeBg = isDraw ? '#F7EDDA' : isWin ? '#D4722A' : '#FEE2E2';
                             const badgeTxt = isDraw ? '#7A4F2D' : isWin ? '#FFFDF9' : '#B91C1C';
                             const badgeBdr = isDraw ? '#C8A882' : isWin ? '#B85E1A' : '#FCA5A5';
                             const badgeText = isDraw ? 'Draw' : game.result;
@@ -199,6 +199,7 @@ export default function ProfilePage() {
                                         boxShadow: '2px 2px 0 #C8A882',
                                         cursor: 'pointer',
                                     }}
+                                    onClick={() => router.push(`/profile/game/${game.$id}`)}
                                     onMouseEnter={e => {
                                         (e.currentTarget as HTMLDivElement).style.transform = 'translate(-1px,-1px)';
                                         (e.currentTarget as HTMLDivElement).style.boxShadow = '3px 3px 0 #C8A882';

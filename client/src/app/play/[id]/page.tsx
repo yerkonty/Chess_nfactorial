@@ -5,10 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { Chess, type Square, type Piece } from 'chess.js';
 import { account, databases } from '@/lib/appwrite';
 import appwriteClient from '@/lib/appwrite';
+import { ID } from 'appwrite';
 import { playMove, playCapture, playCheck, playGameOver } from '@/lib/sounds';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const ROOMS = 'rooms';
+const GAMES_COLLECTION_ID = process.env.NEXT_PUBLIC_APPWRITE_GAMES_COLLECTION_ID!;
 const SQ = 56;
 const FILES_W = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 const RANKS_W = [8, 7, 6, 5, 4, 3, 2, 1];
@@ -21,6 +23,7 @@ const SYMBOLS: Record<string, string> = {
 type RoomDoc = {
     $id: string;
     fen: string;
+    pgn?: string | null;
     status: 'waiting' | 'active' | 'finished';
     player1Id: string;
     player1Name: string;
@@ -68,7 +71,9 @@ export default function PlayRoom() {
     const turnRef = useRef<string>('w');
     const myIdRef = useRef('');
     const myColorRef = useRef<'w' | 'b' | null>(null);
+    const myNameRef = useRef('');
     const submittingRef = useRef(false);
+    const gameSavedRef = useRef(false);
 
     // Drag-and-drop refs
     const boardRef = useRef<HTMLDivElement | null>(null);
@@ -123,6 +128,28 @@ export default function PlayRoom() {
     }, [handleTimeout]);
 
     // ── Handle room update ────────────────────────────────────────────────────
+    const saveFinishedGame = useCallback(async (r: RoomDoc) => {
+        if (gameSavedRef.current) return;
+        if (!myIdRef.current) return;
+        const isPlayer = r.player1Id === myIdRef.current || r.player2Id === myIdRef.current;
+        if (!isPlayer) return;
+
+        const pgn = r.pgn ?? gameRef.current.pgn();
+        const result = r.result ?? 'finished';
+        try {
+            await databases.createDocument(DATABASE_ID, GAMES_COLLECTION_ID, ID.unique(), {
+                userId: myIdRef.current,
+                userName: myNameRef.current || 'Player',
+                result,
+                mode: 'player-vs-player',
+                pgn,
+            });
+            gameSavedRef.current = true;
+        } catch (e) {
+            console.error(e);
+        }
+    }, []);
+
     const applyRoom = useCallback((r: RoomDoc) => {
         roomRef.current = r;
         gameRef.current = new Chess(r.fen);
@@ -135,7 +162,8 @@ export default function PlayRoom() {
         setRoom(r);
         setDisplayGame(new Chess(r.fen));
         syncTimer(r);
-    }, [syncTimer]);
+        if (r.status === 'finished') saveFinishedGame(r);
+    }, [saveFinishedGame, syncTimer]);
 
     // ── Initial load ──────────────────────────────────────────────────────────
     useEffect(() => {
@@ -150,6 +178,7 @@ export default function PlayRoom() {
 
                 const r = doc as unknown as RoomDoc;
                 myIdRef.current = user.$id;
+                myNameRef.current = user.name || '';
 
                 let color: 'w' | 'b' | null = null;
                 if (r.player1Id === user.$id) color = 'w';
@@ -187,7 +216,7 @@ export default function PlayRoom() {
                             const prevFen = gameRef.current.fen();
                             const tmp = new Chess(prevFen);
                             const from = payload.lastMove.slice(0, 2) as Square;
-                            const to   = payload.lastMove.slice(2, 4) as Square;
+                            const to = payload.lastMove.slice(2, 4) as Square;
                             try {
                                 const m = tmp.move({ from, to, promotion: 'q' });
                                 if (m) {
@@ -253,6 +282,7 @@ export default function PlayRoom() {
 
         const updateData: Record<string, unknown> = {
             fen: game.fen(),
+            pgn: game.pgn(),
             turn: game.turn(),
             lastMove: `${from}${to}`,
             status: result ? 'finished' : 'active',
@@ -302,8 +332,8 @@ export default function PlayRoom() {
                     const row = Math.floor((e.clientY - rect.top) / SQ);
                     if (col >= 0 && col < 8 && row >= 0 && row < 8) {
                         const flipped = myColorRef.current === 'b';
-                        const dFiles = flipped ? ['h','g','f','e','d','c','b','a'] : FILES_W;
-                        const dRanks = flipped ? [1,2,3,4,5,6,7,8] : RANKS_W;
+                        const dFiles = flipped ? ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'] : FILES_W;
+                        const dRanks = flipped ? [1, 2, 3, 4, 5, 6, 7, 8] : RANKS_W;
                         const toSq = `${dFiles[col]}${dRanks[row]}` as Square;
                         const from = potentialDrag.current.square;
                         const game = gameRef.current;
@@ -427,18 +457,18 @@ export default function PlayRoom() {
 
     const whiteName = room.player1Name;
     const blackName = room.player2Name ?? '…';
-    const topName  = flipped ? whiteName : blackName;
-    const botName  = flipped ? blackName : whiteName;
-    const topTime  = flipped ? whiteDisplay : blackDisplay;
-    const botTime  = flipped ? blackDisplay : whiteDisplay;
+    const topName = flipped ? whiteName : blackName;
+    const botName = flipped ? blackName : whiteName;
+    const topTime = flipped ? whiteDisplay : blackDisplay;
+    const botTime = flipped ? blackDisplay : whiteDisplay;
     const topColor = flipped ? 'w' : 'b';
     const botColor = flipped ? 'b' : 'w';
     const topActive = room.status === 'active' && room.turn === topColor;
     const botActive = room.status === 'active' && room.turn === botColor;
 
     const PROMO_PIECES = [
-        { key: 'q' as const, label: 'Queen'  },
-        { key: 'r' as const, label: 'Rook'   },
+        { key: 'q' as const, label: 'Queen' },
+        { key: 'r' as const, label: 'Rook' },
         { key: 'b' as const, label: 'Bishop' },
         { key: 'n' as const, label: 'Knight' },
     ];

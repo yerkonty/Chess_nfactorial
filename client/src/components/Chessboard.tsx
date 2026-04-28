@@ -24,11 +24,11 @@ type GameMode = "player-vs-player" | "player-vs-ai";
 type BoardTheme = { id: string; name: string; light: string; dark: string; selectedBg: string; labelColor: string };
 
 const BOARD_THEMES: BoardTheme[] = [
-    { id: 'classic',  name: 'Classic',  light: '#eeeed2', dark: '#769656', selectedBg: '#f6f669', labelColor: '#5d8040' },
-    { id: 'walnut',   name: 'Walnut',   light: '#f0d9b5', dark: '#b58863', selectedBg: '#f6f669', labelColor: '#8a6040' },
-    { id: 'ice',      name: 'Ice',      light: '#dce9f5', dark: '#6d9bc3', selectedBg: '#f6f669', labelColor: '#5078a0' },
+    { id: 'classic', name: 'Classic', light: '#eeeed2', dark: '#769656', selectedBg: '#f6f669', labelColor: '#5d8040' },
+    { id: 'walnut', name: 'Walnut', light: '#f0d9b5', dark: '#b58863', selectedBg: '#f6f669', labelColor: '#8a6040' },
+    { id: 'ice', name: 'Ice', light: '#dce9f5', dark: '#6d9bc3', selectedBg: '#f6f669', labelColor: '#5078a0' },
     { id: 'midnight', name: 'Midnight', light: '#5c5c5c', dark: '#2e2e2e', selectedBg: '#D4722A', labelColor: '#888888' },
-    { id: 'neon',     name: 'Neon',     light: '#d6f57a', dark: '#4a7832', selectedBg: '#fff176', labelColor: '#6aab30' },
+    { id: 'neon', name: 'Neon', light: '#d6f57a', dark: '#4a7832', selectedBg: '#fff176', labelColor: '#6aab30' },
 ];
 
 const RANKS = [8, 7, 6, 5, 4, 3, 2, 1];
@@ -37,19 +37,19 @@ const SQ = 56;
 const COORD = 20;
 
 const C = {
-    bg:           '#FEF9F0',
-    card:         '#FFFDF9',
-    cardAlt:      '#F7EDDA',
-    accent:       '#D4722A',
-    accentHover:  '#E8903F',
-    accentDark:   '#B85E1A',
-    text:         '#4A2C0A',
-    muted:        '#A07650',
-    faint:        '#C8A882',
-    border:       '#E8D9A8',
+    bg: '#FEF9F0',
+    card: '#FFFDF9',
+    cardAlt: '#F7EDDA',
+    accent: '#D4722A',
+    accentHover: '#E8903F',
+    accentDark: '#B85E1A',
+    text: '#4A2C0A',
+    muted: '#A07650',
+    faint: '#C8A882',
+    border: '#E8D9A8',
     borderStrong: '#C8A882',
-    shadow:       '#C8A882',
-    highlight:    '#FFF4E6',
+    shadow: '#C8A882',
+    highlight: '#FFF4E6',
 };
 
 const mcBtn = (active = false, size: 'sm' | 'md' | 'lg' = 'md') => ({
@@ -242,8 +242,8 @@ export default function Chessboard({
             if (!mv || ctrl.cancelled) { setAiThinking(false); return; }
 
             const from = mv.slice(0, 2) as Square;
-            const to   = mv.slice(2, 4) as Square;
-            const promo = mv.length === 5 ? mv[4] as 'q'|'r'|'b'|'n' : undefined;
+            const to = mv.slice(2, 4) as Square;
+            const promo = mv.length === 5 ? mv[4] as 'q' | 'r' | 'b' | 'n' : undefined;
 
             // Guard: FEN must still match (player hasn't reset mid-think)
             if (activeGame.fen() !== fen) { setAiThinking(false); return; }
@@ -313,8 +313,8 @@ export default function Chessboard({
                     const col = Math.floor((e.clientX - rect.left) / SQ);
                     const row = Math.floor((e.clientY - rect.top) / SQ);
                     if (col >= 0 && col < 8 && row >= 0 && row < 8) {
-                        const dFiles = boardFlippedRef.current ? ['h','g','f','e','d','c','b','a'] : FILES;
-                        const dRanks = boardFlippedRef.current ? [1,2,3,4,5,6,7,8] : RANKS;
+                        const dFiles = boardFlippedRef.current ? ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'] : FILES;
+                        const dRanks = boardFlippedRef.current ? [1, 2, 3, 4, 5, 6, 7, 8] : RANKS;
                         const toSquare = (dFiles[col] + dRanks[row]) as Square;
                         const from = potentialDrag.current.square;
                         if (toSquare !== from) {
@@ -464,7 +464,7 @@ export default function Chessboard({
         return p?.type === 'p' && (to[1] === '8' || to[1] === '1');
     }
 
-    function applyMove(from: Square, to: Square, promotion: 'q'|'r'|'b'|'n' = 'q') {
+    function applyMove(from: Square, to: Square, promotion: 'q' | 'r' | 'b' | 'n' = 'q') {
         try {
             const move = game.move({ from, to, promotion });
             if (move) {
@@ -483,7 +483,7 @@ export default function Chessboard({
         } catch { /* invalid */ }
     }
 
-    function completePromotion(piece: 'q'|'r'|'b'|'n') {
+    function completePromotion(piece: 'q' | 'r' | 'b' | 'n') {
         if (!promotionPending) return;
         const { from, to } = promotionPending;
         setPromotionPending(null);
@@ -539,8 +539,8 @@ export default function Chessboard({
 
     const isOver = game.isGameOver();
     const flipped = playerColor === 'b';
-    const displayRanks = flipped ? [1,2,3,4,5,6,7,8] : RANKS;
-    const displayFiles = flipped ? ['h','g','f','e','d','c','b','a'] : FILES;
+    const displayRanks = flipped ? [1, 2, 3, 4, 5, 6, 7, 8] : RANKS;
+    const displayFiles = flipped ? ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'] : FILES;
     const rawBoard = historyBoard ?? board;
     const displayBoard = flipped
         ? rawBoard.slice().reverse().map(row => row.slice().reverse())
