@@ -1,19 +1,79 @@
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #000000;
-  --bg-secondary: #191919;
-  --bg-card: #282828;
-  --accent: #bcfe00;
-  --text-primary: #ffffff;
-  --text-muted: #adacac;
+  --bg-primary:    #FEF9F0;
+  --bg-secondary:  #F7EDDA;
+  --bg-card:       #FFFDF9;
+  --accent:        #D4722A;
+  --accent-hover:  #E8903F;
+  --accent-dark:   #B85E1A;
+  --text-primary:  #4A2C0A;
+  --text-muted:    #A07650;
+  --border:        #E8D9A8;
+  --border-strong: #C8A882;
+  --shadow-color:  #C8A882;
 }
 
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'DM Sans', Arial, Helvetica, sans-serif;
-  font-weight: 300;
+  font-family: 'Nunito', 'DM Sans', Arial, Helvetica, sans-serif;
+  font-weight: 400;
+}
+
+/* ── Minecraft-style button shadow ── */
+.mc-btn {
+  border: 1.5px solid var(--border-strong);
+  box-shadow: 3px 3px 0 var(--shadow-color);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, background-color 0.08s ease;
+  border-radius: 0 !important;
+}
+.mc-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--shadow-color);
+}
+.mc-btn-sm {
+  box-shadow: 2px 2px 0 var(--shadow-color);
+}
+.mc-btn-sm:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--shadow-color);
+}
+.mc-btn-accent {
+  background-color: var(--accent) !important;
+  color: #FFFDF9 !important;
+  border-color: var(--accent-dark) !important;
+  box-shadow: 3px 3px 0 var(--accent-dark) !important;
+}
+.mc-btn-accent:hover:not(:disabled) {
+  background-color: var(--accent-hover) !important;
+}
+.mc-btn-accent:active:not(:disabled) {
+  box-shadow: 1px 1px 0 var(--accent-dark) !important;
+}
+.mc-btn-ghost {
+  background-color: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-strong) !important;
+  box-shadow: 3px 3px 0 var(--border-strong) !important;
+}
+.mc-btn-ghost:hover:not(:disabled) {
+  background-color: var(--bg-secondary) !important;
+}
+.mc-btn-ghost:active:not(:disabled) {
+  box-shadow: 1px 1px 0 var(--border-strong) !important;
+}
+.mc-btn-dark {
+  background-color: #4A2C0A !important;
+  color: #FFFDF9 !important;
+  border-color: #7A4F2D !important;
+  box-shadow: 3px 3px 0 #7A4F2D !important;
+}
+.mc-btn-dark:hover:not(:disabled) {
+  background-color: #7A4F2D !important;
+}
+.mc-btn-dark:active:not(:disabled) {
+  box-shadow: 1px 1px 0 #7A4F2D !important;
 }
 
 @keyframes slide-up {
@@ -21,35 +81,20 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes accent-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(188, 254, 0, 0.35); }
-  50%       { box-shadow: 0 0 16px 4px rgba(188, 254, 0, 0); }
-}
-
 @keyframes spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
-}
-
-@keyframes bg-drift {
-  0%   { background-position: 0% 0%; }
-  50%  { background-position: 100% 100%; }
-  100% { background-position: 0% 0%; }
 }
 
 .animate-slide-up {
   animation: slide-up 0.3s ease-out both;
 }
 
-.animate-glow {
-  animation: accent-glow 2s ease-in-out infinite;
-}
-
 .spinner {
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(188, 254, 0, 0.3);
-  border-top-color: #bcfe00;
+  border: 2px solid rgba(212, 114, 42, 0.25);
+  border-top-color: #D4722A;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   display: inline-block;
@@ -62,7 +107,7 @@ body {
 }
 .board-square:hover .piece-span {
   transform: scale(1.2) translateY(-2px);
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55));
+  filter: drop-shadow(0 4px 8px rgba(74, 44, 10, 0.35));
 }
 
 /* Board: piece landing pop */
@@ -76,6 +121,6 @@ body {
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #191919; }
-::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #bcfe00; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }

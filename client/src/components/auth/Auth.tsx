@@ -47,35 +47,34 @@ export default function AuthForm() {
         }
     };
 
-    const inputClass =
-        'w-full px-4 py-3 mt-1 bg-[#191919] border border-[#333] text-white rounded-sm focus:outline-none focus:border-[#bcfe00] transition-colors placeholder-[#555] text-sm';
+    const inputStyle: React.CSSProperties = {
+        width: '100%', padding: '12px 16px', marginTop: 4,
+        background: '#FFFDF9', border: '1.5px solid #E8D9A8',
+        color: '#4A2C0A', fontSize: 14, outline: 'none',
+        transition: 'border-color 0.15s', fontFamily: 'inherit',
+    };
 
     return (
-        <div className="min-h-screen bg-black flex flex-col items-center justify-center px-4">
+        <div className="min-h-screen flex flex-col items-center justify-center px-4" style={{ background: '#FEF9F0' }}>
             {/* Logo */}
             <div className="mb-10 text-center">
-                <h1 className="text-4xl font-bold tracking-tight">
-                    Y<span style={{ color: '#bcfe00' }}>Chess</span>
+                <h1 className="text-4xl font-black tracking-tight" style={{ color: '#4A2C0A' }}>
+                    Y<span style={{ color: '#D4722A' }}>Chess</span>
                 </h1>
-                <p className="text-sm mt-2" style={{ color: '#adacac' }}>
+                <p className="text-sm font-semibold mt-2" style={{ color: '#A07650' }}>
                     AI-powered chess coaching
                 </p>
             </div>
 
             <div className="w-full max-w-sm animate-slide-up">
                 {/* Tab toggle */}
-                <div className="flex mb-8 border-b border-[#282828]">
+                <div className="flex mb-8" style={{ borderBottom: '1.5px solid #E8D9A8' }}>
                     {(['Login', 'Register'] as const).map((tab) => {
                         const active = isLogin ? tab === 'Login' : tab === 'Register';
                         return (
-                            <button
-                                key={tab}
-                                onClick={() => setIsLogin(tab === 'Login')}
-                                style={active ? { color: '#bcfe00', borderBottomColor: '#bcfe00' } : {}}
-                                className={`flex-1 pb-3 text-sm uppercase tracking-widest transition-colors border-b-2 ${
-                                    active ? 'font-medium border-[#bcfe00]' : 'text-[#adacac] border-transparent hover:text-white'
-                                }`}
-                            >
+                            <button key={tab} onClick={() => setIsLogin(tab === 'Login')}
+                                className="flex-1 pb-3 text-sm font-black uppercase tracking-widest border-b-2 transition-colors"
+                                style={{ color: active ? '#D4722A' : '#C8A882', borderColor: active ? '#D4722A' : 'transparent', background: 'none', cursor: 'pointer' }}>
                                 {tab}
                             </button>
                         );
@@ -85,74 +84,48 @@ export default function AuthForm() {
                 <form onSubmit={isLogin ? handleLogin : handleRegister} className="space-y-4">
                     {!isLogin && (
                         <div>
-                            <label className="block text-xs uppercase tracking-widest text-[#adacac]">
-                                Name
-                            </label>
-                            <input
-                                type="text"
-                                required
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="Your name"
-                                className={inputClass}
-                            />
+                            <label className="block text-xs font-black uppercase tracking-widest" style={{ color: '#A07650' }}>Name</label>
+                            <input type="text" required value={name} onChange={e => setName(e.target.value)}
+                                placeholder="Your name" style={inputStyle}
+                                onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#D4722A'}
+                                onBlur={e => (e.target as HTMLInputElement).style.borderColor = '#E8D9A8'} />
                         </div>
                     )}
                     <div>
-                        <label className="block text-xs uppercase tracking-widest text-[#adacac]">
-                            Email
-                        </label>
-                        <input
-                            type="email"
-                            autoComplete="email"
-                            required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="you@example.com"
-                            className={inputClass}
-                        />
+                        <label className="block text-xs font-black uppercase tracking-widest" style={{ color: '#A07650' }}>Email</label>
+                        <input type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)}
+                            placeholder="you@example.com" style={inputStyle}
+                            onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#D4722A'}
+                            onBlur={e => (e.target as HTMLInputElement).style.borderColor = '#E8D9A8'} />
                     </div>
                     <div>
-                        <label className="block text-xs uppercase tracking-widest text-[#adacac]">
-                            Password
-                        </label>
-                        <input
-                            type="password"
-                            autoComplete="current-password"
-                            required
-                            minLength={8}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="••••••••"
-                            className={inputClass}
-                        />
+                        <label className="block text-xs font-black uppercase tracking-widest" style={{ color: '#A07650' }}>Password</label>
+                        <input type="password" autoComplete="current-password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)}
+                            placeholder="••••••••" style={inputStyle}
+                            onFocus={e => (e.target as HTMLInputElement).style.borderColor = '#D4722A'}
+                            onBlur={e => (e.target as HTMLInputElement).style.borderColor = '#E8D9A8'} />
                     </div>
 
                     {error && (
-                        <p className="text-red-400 text-xs bg-red-400/10 border border-red-400/20 rounded-sm px-3 py-2">
+                        <p className="text-xs font-semibold px-3 py-2" style={{ color: '#B91C1C', background: '#FEE2E2', border: '1.5px solid #FCA5A5' }}>
                             {error}
                         </p>
                     )}
 
-                    <button
-                        type="submit"
-                        className="w-full py-3 mt-2 font-bold uppercase tracking-widest text-black text-sm rounded-sm transition-all hover:brightness-110 active:scale-[0.98]"
-                        style={{ backgroundColor: '#bcfe00' }}
-                    >
+                    <button type="submit"
+                        className="w-full py-3 mt-2 font-black uppercase tracking-widest text-sm mc-btn mc-btn-accent">
                         {isLogin ? 'Login' : 'Create Account'}
                     </button>
                 </form>
 
                 <div className="flex items-center gap-3 my-6">
-                    <div className="flex-1 h-px bg-[#282828]" />
-                    <span className="text-xs uppercase tracking-widest text-[#555]">or</span>
-                    <div className="flex-1 h-px bg-[#282828]" />
+                    <div className="flex-1 h-px" style={{ background: '#E8D9A8' }} />
+                    <span className="text-xs font-black uppercase tracking-widest" style={{ color: '#C8A882' }}>or</span>
+                    <div className="flex-1 h-px" style={{ background: '#E8D9A8' }} />
                 </div>
 
-                <button
-                    onClick={handleGoogleLogin}
-                    className="w-full py-3 border border-[#333] text-white text-sm uppercase tracking-widest rounded-sm hover:border-[#bcfe00] hover:text-[#bcfe00] transition-all active:scale-[0.98]"
-                >
+                <button onClick={handleGoogleLogin}
+                    className="w-full py-3 text-sm font-black uppercase tracking-widest mc-btn mc-btn-ghost">
                     Continue with Google
                 </button>
             </div>

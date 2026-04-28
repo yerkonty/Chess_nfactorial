@@ -20,7 +20,6 @@ export default function Home() {
         const prefs = currentUser.prefs as { purchasedSkins?: string[] };
         const existing: string[] = prefs.purchasedSkins ?? [];
 
-        // Handle post-Stripe redirect (read URL params without useSearchParams)
         const params = new URLSearchParams(window.location.search);
         const skinId    = params.get('skin');
         const sessionId = params.get('session_id');
@@ -43,7 +42,6 @@ export default function Home() {
           setPurchasedSkins(existing);
         }
 
-        // Clean URL params without triggering a navigation
         if (skinId || sessionId) {
           window.history.replaceState({}, '', '/');
         }
@@ -63,17 +61,17 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-black">
+      <div className="flex items-center justify-center min-h-screen" style={{ background: '#FEF9F0' }}>
         <div className="text-center">
           <div className="spinner mx-auto mb-3" />
-          <p className="text-sm" style={{ color: '#adacac' }}>Loading…</p>
+          <p className="text-sm font-semibold" style={{ color: '#A07650' }}>Loading…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-black">
+    <main className="min-h-screen" style={{ background: '#FEF9F0' }}>
       {user
         ? <Chessboard
             userId={user.$id}

@@ -1,25 +1,47 @@
-let stockfish = null;
+let engine = null;
+let engineReady = false;
+const queue = [];
 
-self.onmessage = async (event) => {
-    const { type, payload } = event.data;
+self.onmessage = async (e) => {
+    const { type, payload } = e.data;
 
     if (type === 'init') {
-        if (!stockfish) {
-            importScripts('/stockfish-18-lite.js');
-            stockfish = await Stockfish();
+        if (engine) {
+            // Already initialised — just report ready status
+            if (engineReady) self.postMessage({ type: 'ready' });
+            return;
+        }
+        importScripts('/stockfish-18-lite.js');
+        engine = await Stockfish();
 
-            stockfish.addMessageListener((line) => {
-                self.postMessage({ type: 'engine-message', payload: line });
-                if (line.startsWith('bestmove')) {
-                    const bestMove = line.split(' ')[1];
-                    self.postMessage({ type: 'best-move', payload: bestMove });
+        engine.addMessageListener(line => {
+            if (line === 'readyok') {
+                engineReady = true;
+                self.postMessage({ type: 'ready' });
+                // Flush commands that arrived before the engine was ready
+                queue.forEach(cmd => engine.postMessage(cmd));
+                queue.length = 0;
+            }
+            if (line.startsWith('bestmove')) {
+                const mv = line.split(' ')[1];
+                if (mv && mv !== '(none)') {
+                    self.postMessage({ type: 'best-move', payload: mv });
                 }
-            });
-        }
-        self.postMessage({ type: 'init-complete' });
+            }
+        });
+
+        // Handshake — wait for readyok before accepting position/go
+        engine.postMessage('uci');
+        engine.postMessage('isready');
+
     } else if (type === 'uci') {
-        if (stockfish) {
-            stockfish.postMessage(payload);
+        // Raw UCI string forwarding (same as original worker)
+        if (!engineReady) {
+            queue.push(payload);
+        } else {
+            engine.postMessage(payload);
         }
+    } else if (type === 'stop') {
+        if (engine) engine.postMessage('stop');
     }
 };

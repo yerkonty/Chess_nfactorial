@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Chess, type Square, type Piece } from 'chess.js';
 import { account, databases } from '@/lib/appwrite';
 import appwriteClient from '@/lib/appwrite';
+import { playMove, playCapture, playCheck, playGameOver } from '@/lib/sounds';
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const ROOMS = 'rooms';
@@ -23,15 +24,15 @@ type RoomDoc = {
     status: 'waiting' | 'active' | 'finished';
     player1Id: string;
     player1Name: string;
-    player2Id: string | null;
-    player2Name: string | null;
+    player2Id?: string | null;
+    player2Name?: string | null;
     turn: string;
-    lastMove: string | null;
-    whiteTime: number;
-    blackTime: number;
-    lastMoveAt: string | null;
-    timerDuration: number;
-    result: string | null;
+    lastMove?: string | null;
+    whiteTime?: number;
+    blackTime?: number;
+    lastMoveAt?: string | null;
+    timerDuration?: number;
+    result?: string | null;
 };
 
 function fmt(s: number) {
@@ -45,30 +46,52 @@ export default function PlayRoom() {
     const router = useRouter();
 
     const [room, setRoom] = useState<RoomDoc | null>(null);
-    const [myId, setMyId] = useState('');
+    const [displayGame, setDisplayGame] = useState(new Chess());
     const [myColor, setMyColor] = useState<'w' | 'b' | null>(null);
     const [selected, setSelected] = useState<Square | null>(null);
     const [hints, setHints] = useState<string[]>([]);
     const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
-    const [whiteDisplay, setWhiteDisplay] = useState(300);
-    const [blackDisplay, setBlackDisplay] = useState(300);
+    const [moveCount, setMoveCount] = useState(0);
+    const [whiteDisplay, setWhiteDisplay] = useState(0);
+    const [blackDisplay, setBlackDisplay] = useState(0);
     const [copied, setCopied] = useState(false);
     const [promo, setPromo] = useState<{ from: Square; to: Square } | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [dragState, setDragState] = useState<{ square: Square; piece: Piece; x: number; y: number } | null>(null);
 
     const gameRef = useRef(new Chess());
+    const roomRef = useRef<RoomDoc | null>(null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const storedWt = useRef(300);
-    const storedBt = useRef(300);
+    const storedWt = useRef(0);
+    const storedBt = useRef(0);
     const lastMoveAtRef = useRef<number | null>(null);
     const turnRef = useRef<string>('w');
     const myIdRef = useRef('');
     const myColorRef = useRef<'w' | 'b' | null>(null);
+    const submittingRef = useRef(false);
+
+    // Drag-and-drop refs
+    const boardRef = useRef<HTMLDivElement | null>(null);
+    const potentialDrag = useRef<{ square: Square; piece: Piece; startX: number; startY: number } | null>(null);
+    const isDraggingRef = useRef(false);
+    const justDragged = useRef(false);
 
     // ── Sync timer from room ──────────────────────────────────────────────────
-    function syncTimer(r: RoomDoc) {
-        storedWt.current = r.whiteTime;
-        storedBt.current = r.blackTime;
+    const handleTimeout = useCallback(async (color: 'w' | 'b') => {
+        if (timerRef.current) clearInterval(timerRef.current);
+        const winner = color === 'w' ? 'Black' : 'White';
+        try {
+            await databases.updateDocument(DATABASE_ID, ROOMS, id, {
+                status: 'finished',
+                result: `${winner} wins on time`,
+            });
+        } catch { /* another client may have already updated */ }
+    }, [id]);
+
+    const syncTimer = useCallback((r: RoomDoc) => {
+        const defaultTime = r.timerDuration ?? 300;
+        storedWt.current = r.whiteTime ?? defaultTime;
+        storedBt.current = r.blackTime ?? defaultTime;
         lastMoveAtRef.current = r.lastMoveAt ? new Date(r.lastMoveAt).getTime() : null;
         turnRef.current = r.turn;
 
@@ -76,8 +99,8 @@ export default function PlayRoom() {
             ? Math.floor((Date.now() - lastMoveAtRef.current) / 1000)
             : 0;
 
-        setWhiteDisplay(r.turn === 'w' ? Math.max(0, r.whiteTime - elapsed) : r.whiteTime);
-        setBlackDisplay(r.turn === 'b' ? Math.max(0, r.blackTime - elapsed) : r.blackTime);
+        setWhiteDisplay(r.turn === 'w' ? Math.max(0, storedWt.current - elapsed) : storedWt.current);
+        setBlackDisplay(r.turn === 'b' ? Math.max(0, storedBt.current - elapsed) : storedBt.current);
 
         if (timerRef.current) clearInterval(timerRef.current);
         if (r.status !== 'active') return;
@@ -97,32 +120,22 @@ export default function PlayRoom() {
                 if (t === 0) handleTimeout('b');
             }
         }, 500);
-    }
+    }, [handleTimeout]);
 
     // ── Handle room update ────────────────────────────────────────────────────
-    function applyRoom(r: RoomDoc) {
+    const applyRoom = useCallback((r: RoomDoc) => {
+        roomRef.current = r;
         gameRef.current = new Chess(r.fen);
         if (r.lastMove) {
             setLastMove({ from: r.lastMove.slice(0, 2), to: r.lastMove.slice(2, 4) });
+            setMoveCount(c => c + 1);
         }
         setSelected(null);
         setHints([]);
         setRoom(r);
+        setDisplayGame(new Chess(r.fen));
         syncTimer(r);
-    }
-
-    // ── Timeout ───────────────────────────────────────────────────────────────
-    async function handleTimeout(color: 'w' | 'b') {
-        if (timerRef.current) clearInterval(timerRef.current);
-        const loser = color === 'w' ? 'White' : 'Black';
-        const winner = color === 'w' ? 'Black' : 'White';
-        try {
-            await databases.updateDocument(DATABASE_ID, ROOMS, id, {
-                status: 'finished',
-                result: `${winner} wins on time`,
-            });
-        } catch { /* another client may have already updated */ }
-    }
+    }, [syncTimer]);
 
     // ── Initial load ──────────────────────────────────────────────────────────
     useEffect(() => {
@@ -137,38 +150,63 @@ export default function PlayRoom() {
 
                 const r = doc as unknown as RoomDoc;
                 myIdRef.current = user.$id;
-                setMyId(user.$id);
 
-                // Determine color
                 let color: 'w' | 'b' | null = null;
                 if (r.player1Id === user.$id) color = 'w';
                 else if (r.player2Id === user.$id) color = 'b';
                 else if (!r.player2Id && r.status === 'waiting') {
-                    // Join as player 2
-                    const updated = await databases.updateDocument(DATABASE_ID, ROOMS, id, {
+                    const joinFields: Record<string, unknown> = {
                         player2Id: user.$id,
                         player2Name: user.name || 'Player 2',
                         status: 'active',
-                        lastMoveAt: new Date().toISOString(),
-                    });
-                    color = 'b';
-                    applyRoom(updated as unknown as RoomDoc);
+                    };
+                    try {
+                        const updated = await databases.updateDocument(DATABASE_ID, ROOMS, id, {
+                            ...joinFields,
+                            lastMoveAt: new Date().toISOString(),
+                        });
+                        color = 'b';
+                        applyRoom(updated as unknown as RoomDoc);
+                    } catch {
+                        const updated = await databases.updateDocument(DATABASE_ID, ROOMS, id, joinFields);
+                        color = 'b';
+                        applyRoom(updated as unknown as RoomDoc);
+                    }
                 }
 
                 myColorRef.current = color;
                 setMyColor(color);
                 applyRoom(r);
 
-                // Subscribe to real-time updates
                 unsubscribe = appwriteClient.subscribe(
                     `databases.${DATABASE_ID}.collections.${ROOMS}.documents.${id}`,
                     (response) => {
                         const payload = response.payload as RoomDoc;
+                        // Play sound on opponent's move (ours was played in submitMove)
+                        if (payload.lastMove && myColorRef.current !== null) {
+                            const prevFen = gameRef.current.fen();
+                            const tmp = new Chess(prevFen);
+                            const from = payload.lastMove.slice(0, 2) as Square;
+                            const to   = payload.lastMove.slice(2, 4) as Square;
+                            try {
+                                const m = tmp.move({ from, to, promotion: 'q' });
+                                if (m) {
+                                    if (tmp.isGameOver()) playGameOver();
+                                    else if (tmp.inCheck()) playCheck();
+                                    else if (m.captured) playCapture();
+                                    else playMove();
+                                }
+                            } catch { /* ignore */ }
+                        }
                         applyRoom(payload);
                     }
                 );
-            } catch (e) {
+            } catch (e: unknown) {
                 console.error(e);
+                const msg = e instanceof Error ? e.message : String(e);
+                if (msg.includes('401') || msg.includes('Unauthorized') || msg.includes('user_unauthorized') || msg.includes('missing scope')) {
+                    router.push('/login');
+                }
             }
         };
 
@@ -177,58 +215,158 @@ export default function PlayRoom() {
             unsubscribe?.();
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    }, [id]);
+    }, [id, applyRoom, router]);
 
-    // ── Make move ─────────────────────────────────────────────────────────────
-    async function submitMove(from: Square, to: Square, promotion: 'q' | 'r' | 'b' | 'n' = 'q') {
-        if (submitting) return;
-        const r = room;
+    // ── Make move (ref-safe version used by drag handler) ─────────────────────
+    const doSubmitMove = useCallback(async (from: Square, to: Square, promotion: 'q' | 'r' | 'b' | 'n' = 'q') => {
+        if (submittingRef.current) return;
+        const r = roomRef.current;
         if (!r || r.status !== 'active') return;
         if (myColorRef.current !== gameRef.current.turn()) return;
 
         const game = gameRef.current;
         let move;
-        try {
-            move = game.move({ from, to, promotion });
-        } catch { return; }
+        try { move = game.move({ from, to, promotion }); } catch { return; }
         if (!move) return;
 
-        setSubmitting(true);
+        // Play sound immediately on our own move
+        if (game.isGameOver()) playGameOver();
+        else if (game.inCheck()) playCheck();
+        else if (move.captured) playCapture();
+        else playMove();
+
+        submittingRef.current = true;
 
         const now = Date.now();
         const elapsed = lastMoveAtRef.current
             ? Math.floor((now - lastMoveAtRef.current) / 1000)
             : 0;
 
-        const newWt = r.turn === 'w' ? Math.max(0, r.whiteTime - elapsed) : r.whiteTime;
-        const newBt = r.turn === 'b' ? Math.max(0, r.blackTime - elapsed) : r.blackTime;
+        const wt = r.whiteTime ?? storedWt.current;
+        const bt = r.blackTime ?? storedBt.current;
+        const newWt = r.turn === 'w' ? Math.max(0, wt - elapsed) : wt;
+        const newBt = r.turn === 'b' ? Math.max(0, bt - elapsed) : bt;
 
         let result: string | null = null;
         if (game.isCheckmate()) result = `${game.turn() === 'w' ? 'Black' : 'White'} wins by checkmate`;
         else if (game.isDraw()) result = 'Draw';
 
+        const updateData: Record<string, unknown> = {
+            fen: game.fen(),
+            turn: game.turn(),
+            lastMove: `${from}${to}`,
+            status: result ? 'finished' : 'active',
+            result,
+        };
+
+        // Only include timer fields if the room has them
+        if (r.timerDuration) {
+            updateData.whiteTime = newWt;
+            updateData.blackTime = newBt;
+            updateData.lastMoveAt = new Date(now).toISOString();
+        }
+
         try {
-            await databases.updateDocument(DATABASE_ID, ROOMS, id, {
-                fen: game.fen(),
-                turn: game.turn(),
-                lastMove: `${from}${to}`,
-                whiteTime: newWt,
-                blackTime: newBt,
-                lastMoveAt: new Date(now).toISOString(),
-                status: result ? 'finished' : 'active',
-                result,
-            });
+            await databases.updateDocument(DATABASE_ID, ROOMS, id, updateData);
         } catch (e) {
             console.error(e);
         } finally {
-            setSubmitting(false);
+            submittingRef.current = false;
+        }
+    }, [id]);
+
+    // ── Drag-and-drop ─────────────────────────────────────────────────────────
+    useEffect(() => {
+        const onMouseMove = (e: MouseEvent) => {
+            if (!potentialDrag.current) return;
+            const dx = e.clientX - potentialDrag.current.startX;
+            const dy = e.clientY - potentialDrag.current.startY;
+            if (!isDraggingRef.current && Math.hypot(dx, dy) > 5) {
+                isDraggingRef.current = true;
+                document.body.style.cursor = 'grabbing';
+            }
+            if (isDraggingRef.current) {
+                const { square, piece } = potentialDrag.current;
+                setDragState({ square, piece, x: e.clientX, y: e.clientY });
+            }
+        };
+
+        const onMouseUp = (e: MouseEvent) => {
+            if (potentialDrag.current && isDraggingRef.current) {
+                justDragged.current = true;
+                const boardEl = boardRef.current;
+                const r = roomRef.current;
+                if (boardEl && r?.status === 'active') {
+                    const rect = boardEl.getBoundingClientRect();
+                    const col = Math.floor((e.clientX - rect.left) / SQ);
+                    const row = Math.floor((e.clientY - rect.top) / SQ);
+                    if (col >= 0 && col < 8 && row >= 0 && row < 8) {
+                        const flipped = myColorRef.current === 'b';
+                        const dFiles = flipped ? ['h','g','f','e','d','c','b','a'] : FILES_W;
+                        const dRanks = flipped ? [1,2,3,4,5,6,7,8] : RANKS_W;
+                        const toSq = `${dFiles[col]}${dRanks[row]}` as Square;
+                        const from = potentialDrag.current.square;
+                        const game = gameRef.current;
+                        if (toSq !== from && myColorRef.current === game.turn()) {
+                            const movingPiece = game.get(from);
+                            const legal = game.moves({ square: from, verbose: true });
+                            const isLegal = legal.some((m: { to: string }) => m.to === toSq);
+                            if (isLegal) {
+                                const isPromo = movingPiece?.type === 'p' && (toSq[1] === '8' || toSq[1] === '1');
+                                if (isPromo) {
+                                    setPromo({ from, to: toSq });
+                                } else {
+                                    doSubmitMove(from, toSq);
+                                }
+                            }
+                        }
+                    }
+                }
+                setSelected(null);
+                setHints([]);
+            }
+            document.body.style.cursor = '';
+            potentialDrag.current = null;
+            isDraggingRef.current = false;
+            setDragState(null);
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+    }, [doSubmitMove]);
+
+    // ── Make move (React state version used by click handler) ─────────────────
+    async function submitMove(from: Square, to: Square, promotion: 'q' | 'r' | 'b' | 'n' = 'q') {
+        if (submitting) return;
+        setSubmitting(true);
+        await doSubmitMove(from, to, promotion);
+        setSubmitting(false);
+    }
+
+    // ── Piece mouse down ──────────────────────────────────────────────────────
+    function handlePieceMouseDown(e: React.MouseEvent, square: Square, piece: Piece) {
+        const r = roomRef.current;
+        if (!r || r.status !== 'active') return;
+        if (myColorRef.current !== gameRef.current.turn()) return;
+        if (piece.color !== myColorRef.current) return;
+        e.preventDefault();
+        potentialDrag.current = { square, piece, startX: e.clientX, startY: e.clientY };
+        const legalMoves = gameRef.current.moves({ square, verbose: true });
+        if (legalMoves.length > 0) {
+            setSelected(square);
+            setHints(legalMoves.map(m => m.to));
         }
     }
 
     // ── Square click ──────────────────────────────────────────────────────────
     function onSquareClick(sq: Square) {
+        if (justDragged.current) { justDragged.current = false; return; }
         if (promo) return;
-        const r = room;
+        const r = roomRef.current;
         if (!r || r.status !== 'active') return;
         if (myColorRef.current !== gameRef.current.turn()) return;
 
@@ -259,10 +397,10 @@ export default function PlayRoom() {
     // ── Render ────────────────────────────────────────────────────────────────
     if (!room) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-black">
+            <div className="flex items-center justify-center min-h-screen" style={{ background: '#FEF9F0' }}>
                 <div className="text-center">
                     <div className="spinner mx-auto mb-3" />
-                    <p className="text-sm" style={{ color: '#adacac' }}>Connecting…</p>
+                    <p className="text-sm font-semibold" style={{ color: '#A07650' }}>Connecting…</p>
                 </div>
             </div>
         );
@@ -271,14 +409,13 @@ export default function PlayRoom() {
     const flipped = myColor === 'b';
     const ranks = flipped ? [1, 2, 3, 4, 5, 6, 7, 8] : RANKS_W;
     const files = flipped ? ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'] : FILES_W;
-    const board = gameRef.current.board();
 
-    const inCheck = gameRef.current.inCheck();
+    const inCheck = displayGame.inCheck();
     const checkKingSq: Square | null = inCheck ? (() => {
-        const t = gameRef.current.turn();
+        const t = displayGame.turn();
         for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
             const sq = (FILES_W[c] + RANKS_W[r]) as Square;
-            const p = gameRef.current.get(sq);
+            const p = displayGame.get(sq);
             if (p?.type === 'k' && p.color === t) return sq;
         }
         return null;
@@ -307,26 +444,31 @@ export default function PlayRoom() {
     ];
 
     return (
-        <div className="min-h-screen bg-black text-white flex flex-col">
+        <div className="min-h-screen flex flex-col" style={{ background: '#FEF9F0', color: '#4A2C0A' }}>
+            {/* Floating drag piece */}
+            {dragState && (
+                <div style={{ position: 'fixed', left: dragState.x - SQ * 0.6, top: dragState.y - SQ * 0.6, width: SQ * 1.2, height: SQ * 1.2, fontSize: SQ * 0.9, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 9999, lineHeight: 1, filter: 'drop-shadow(0 8px 20px rgba(74,44,10,0.4))', transform: 'scale(1.18)' }}>
+                    {SYMBOLS[dragState.piece.color === 'b' ? dragState.piece.type : dragState.piece.type.toUpperCase()]}
+                </div>
+            )}
+
             {/* Promotion dialog */}
             {promo && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(3px)' }}>
-                    <div className="rounded-sm animate-slide-up" style={{ backgroundColor: '#111', border: '1px solid #282828' }}>
-                        <p className="text-xs uppercase tracking-widest px-6 pt-5 pb-4" style={{ color: '#adacac' }}>Promote pawn to</p>
+                <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(74,44,10,0.55)', backdropFilter: 'blur(3px)' }}>
+                    <div className="animate-slide-up" style={{ background: '#FFFDF9', border: '1.5px solid #C8A882', boxShadow: '6px 6px 0 #C8A882' }}>
+                        <p className="text-xs font-black uppercase tracking-widest px-6 pt-5 pb-4" style={{ color: '#A07650' }}>Promote pawn to</p>
                         <div className="flex gap-2 px-5 pb-5">
                             {PROMO_PIECES.map(({ key, label }) => {
-                                const color = gameRef.current.turn();
+                                const color = displayGame.turn();
                                 const sym = SYMBOLS[color === 'w' ? key.toUpperCase() : key];
                                 return (
-                                    <button
-                                        key={key}
-                                        onClick={() => { submitMove(promo.from, promo.to, key); setPromo(null); }}
-                                        title={label}
-                                        className="flex flex-col items-center gap-1 rounded-sm border border-[#333] hover:border-[#bcfe00] transition-all"
-                                        style={{ width: 60, height: 72, backgroundColor: '#191919', fontSize: 36 }}
-                                    >
+                                    <button key={key} onClick={() => { submitMove(promo.from, promo.to, key); setPromo(null); }} title={label}
+                                        className="flex flex-col items-center gap-1"
+                                        style={{ width: 60, height: 72, background: '#F7EDDA', border: '1.5px solid #C8A882', boxShadow: '2px 2px 0 #C8A882', fontSize: 36, cursor: 'pointer' }}
+                                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#D4722A'; }}
+                                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#C8A882'; }}>
                                         <span className="mt-2">{sym}</span>
-                                        <span className="text-[9px] uppercase tracking-widest" style={{ color: '#555' }}>{label}</span>
+                                        <span style={{ fontSize: 9, color: '#A07650', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
                                     </button>
                                 );
                             })}
@@ -336,11 +478,11 @@ export default function PlayRoom() {
             )}
 
             {/* Nav */}
-            <nav className="border-b border-[#1a1a1a] px-6 py-4 flex items-center justify-between flex-shrink-0">
-                <button onClick={() => router.push('/')} className="text-sm uppercase tracking-widest transition-colors hover:text-[#bcfe00]" style={{ color: '#adacac' }}>
+            <nav style={{ background: '#FFFDF9', borderBottom: '1.5px solid #E8D9A8' }} className="px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <button onClick={() => router.push('/')} className="text-xs font-black uppercase tracking-widest hover:underline" style={{ color: '#A07650', background: 'none', border: 'none', cursor: 'pointer' }}>
                     ← Home
                 </button>
-                <span className="text-lg font-bold">Y<span style={{ color: '#bcfe00' }}>Chess</span></span>
+                <span className="text-lg font-black tracking-tight" style={{ color: '#4A2C0A' }}>Y<span style={{ color: '#D4722A' }}>Chess</span></span>
                 <div style={{ width: 60 }} />
             </nav>
 
@@ -348,23 +490,15 @@ export default function PlayRoom() {
 
                 {/* Waiting banner */}
                 {waiting && (
-                    <div className="w-full max-w-md rounded-sm border border-[#bcfe00] px-5 py-4 mb-2" style={{ backgroundColor: '#0d1a00' }}>
-                        <p className="text-sm font-medium mb-3" style={{ color: '#bcfe00' }}>
-                            Waiting for opponent…
-                        </p>
-                        <p className="text-xs mb-3" style={{ color: '#adacac' }}>Share this link with your friend:</p>
+                    <div className="w-full max-w-md px-5 py-4 mb-2" style={{ background: '#FFF4E6', border: '1.5px solid #D4722A', boxShadow: '3px 3px 0 #C8A882' }}>
+                        <p className="text-sm font-black mb-3" style={{ color: '#D4722A' }}>Waiting for opponent…</p>
+                        <p className="text-xs font-semibold mb-3" style={{ color: '#A07650' }}>Share this link with your friend:</p>
                         <div className="flex gap-2">
-                            <input
-                                readOnly
-                                value={link}
-                                className="flex-1 text-xs px-3 py-2 rounded-sm border border-[#333] bg-black"
-                                style={{ color: '#adacac' }}
-                            />
-                            <button
-                                onClick={() => { navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-                                className="px-4 py-2 text-xs uppercase tracking-widest rounded-sm font-bold transition-all"
-                                style={{ backgroundColor: copied ? '#4a7832' : '#bcfe00', color: '#000' }}
-                            >
+                            <input readOnly value={link} className="flex-1 text-xs px-3 py-2 font-semibold"
+                                style={{ background: '#FFFDF9', border: '1.5px solid #E8D9A8', color: '#4A2C0A', outline: 'none' }} />
+                            <button onClick={() => { navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                                className="px-4 py-2 text-xs font-black uppercase tracking-widest"
+                                style={{ background: copied ? '#769656' : '#D4722A', color: '#FFFDF9', border: `1.5px solid ${copied ? '#5d8040' : '#B85E1A'}`, boxShadow: `2px 2px 0 ${copied ? '#5d8040' : '#B85E1A'}`, cursor: 'pointer' }}>
                                 {copied ? 'Copied!' : 'Copy'}
                             </button>
                         </div>
@@ -373,45 +507,34 @@ export default function PlayRoom() {
 
                 {/* Finished banner */}
                 {finished && (
-                    <div className="w-full max-w-md rounded-sm border border-[#bcfe00] px-5 py-4 mb-2 text-center" style={{ backgroundColor: '#0d1a00' }}>
-                        <p className="text-lg font-bold mb-1" style={{ color: '#bcfe00' }}>{room.result}</p>
-                        <button onClick={() => router.push('/play')} className="mt-3 text-xs uppercase tracking-widest hover:text-white transition-colors" style={{ color: '#555' }}>
+                    <div className="w-full max-w-md px-5 py-4 mb-2 text-center" style={{ background: '#FFF4E6', border: '1.5px solid #D4722A', boxShadow: '3px 3px 0 #C8A882' }}>
+                        <p className="text-lg font-black mb-1" style={{ color: '#D4722A' }}>{room.result}</p>
+                        <button onClick={() => router.push('/play')} className="mt-3 text-xs font-black uppercase tracking-widest hover:underline" style={{ color: '#A07650', background: 'none', border: 'none', cursor: 'pointer' }}>
                             New game →
                         </button>
                     </div>
                 )}
 
-                {/* Top player (opponent from your view) */}
+                {/* Top player */}
                 <div className="flex items-center justify-between w-full" style={{ maxWidth: SQ * 8 + 40 }}>
-                    <span className="text-sm font-medium" style={{ color: topActive ? '#fff' : '#555' }}>{topName}</span>
-                    <div
-                        className="text-2xl font-bold tabular-nums px-3 py-1 rounded-sm"
-                        style={{
-                            color: topActive ? '#000' : '#555',
-                            backgroundColor: topActive ? '#bcfe00' : '#191919',
-                            border: topActive ? 'none' : '1px solid #282828',
-                            minWidth: 80,
-                            textAlign: 'center',
-                        }}
-                    >
-                        {fmt(topTime)}
-                    </div>
+                    <span className="text-sm font-bold" style={{ color: topActive ? '#4A2C0A' : '#C8A882' }}>{topName}</span>
+                    {room.timerDuration && (
+                        <div className="text-2xl font-black tabular-nums px-3 py-1"
+                            style={{ color: topActive ? '#FFFDF9' : '#A07650', background: topActive ? '#D4722A' : '#FFFDF9', border: `1.5px solid ${topActive ? '#B85E1A' : '#E8D9A8'}`, boxShadow: `2px 2px 0 ${topActive ? '#B85E1A' : '#C8A882'}`, minWidth: 80, textAlign: 'center' }}>
+                            {fmt(topTime)}
+                        </div>
+                    )}
                 </div>
 
                 {/* Board */}
                 <div style={{ display: 'inline-flex', flexDirection: 'column' }}>
                     <div style={{ display: 'flex' }}>
-                        {/* Rank labels */}
                         <div style={{ display: 'flex', flexDirection: 'column', width: 20 }}>
                             {ranks.map(r => (
-                                <div key={r} style={{ height: SQ, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#555', userSelect: 'none' }}>
-                                    {r}
-                                </div>
+                                <div key={r} style={{ height: SQ, width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#C8A882', userSelect: 'none' }}>{r}</div>
                             ))}
                         </div>
-
-                        {/* Squares */}
-                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(8, ${SQ}px)`, boxShadow: '0 0 40px rgba(0,0,0,0.8)', borderRadius: 2, overflow: 'hidden' }}>
+                        <div ref={boardRef} style={{ display: 'grid', gridTemplateColumns: `repeat(8, ${SQ}px)`, boxShadow: '5px 5px 0 #C8A882', border: '1.5px solid #C8A882', overflow: 'hidden' }}>
                             {ranks.map((rank, rowIdx) =>
                                 files.map((file, colIdx) => {
                                     const sq = `${file}${rank}` as Square;
@@ -419,28 +542,24 @@ export default function PlayRoom() {
                                     const isSelected = selected === sq;
                                     const isHint = hints.includes(sq);
                                     const isLastMove = !!lastMove && (sq === lastMove.from || sq === lastMove.to);
+                                    const isLanding = !!lastMove && sq === lastMove.to;
                                     const isCheck = sq === checkKingSq;
-
-                                    // Get piece from board array
-                                    const fileIdx = FILES_W.indexOf(file);
-                                    const rankIdx = RANKS_W.indexOf(rank);
-                                    const piece: Piece | null = board[rankIdx]?.[fileIdx] ?? null;
+                                    const fileIdx = FILES_W.indexOf(file as string);
+                                    const rankIdx = RANKS_W.indexOf(rank as number);
+                                    const piece: Piece | null = displayGame.board()[rankIdx]?.[fileIdx] ?? null;
                                     const isCapture = isHint && !!piece;
-
                                     const bg = isSelected ? '#f6f669' : isLight ? '#eeeed2' : '#769656';
-
                                     return (
-                                        <div
-                                            key={sq}
-                                            onClick={() => onSquareClick(sq)}
-                                            style={{ width: SQ, height: SQ, backgroundColor: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', cursor: 'pointer', userSelect: 'none', fontSize: 36 }}
-                                        >
-                                            {isCheck && <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle, rgba(255,30,30,0.75) 0%, rgba(220,0,0,0.2) 60%, transparent 100%)', pointerEvents: 'none' }} />}
-                                            {isLastMove && <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(205,210,56,0.4)', pointerEvents: 'none' }} />}
-                                            {isHint && !isCapture && <div style={{ width: SQ * 0.3, height: SQ * 0.3, borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.22)', pointerEvents: 'none' }} />}
-                                            {isCapture && <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: '0 0 0 5px rgba(0,0,0,0.28) inset', pointerEvents: 'none' }} />}
+                                        <div key={sq} className="board-square" onClick={() => onSquareClick(sq)}
+                                            style={{ width: SQ, height: SQ, backgroundColor: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', cursor: 'pointer', userSelect: 'none', fontSize: 36 }}>
+                                            {isCheck && <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at center, rgba(255,30,30,0.7) 0%, rgba(220,0,0,0.2) 60%, transparent 100%)', pointerEvents: 'none' }} />}
+                                            {isLastMove && <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(212,114,42,0.28)', pointerEvents: 'none' }} />}
+                                            {isHint && !isCapture && <div style={{ width: SQ * 0.3, height: SQ * 0.3, borderRadius: '50%', backgroundColor: 'rgba(74,44,10,0.18)', pointerEvents: 'none' }} />}
+                                            {isCapture && <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: '0 0 0 5px rgba(74,44,10,0.22) inset', pointerEvents: 'none' }} />}
                                             {piece && (
-                                                <span style={{ zIndex: 1, lineHeight: 1 }}>
+                                                <span key={isLanding ? moveCount : undefined} className={`piece-span${isLanding ? ' piece-land' : ''}`}
+                                                    onMouseDown={e => handlePieceMouseDown(e, sq, piece)}
+                                                    style={{ zIndex: 1, lineHeight: 1, cursor: piece.color === myColor ? 'grab' : 'default', opacity: dragState?.square === sq ? 0.15 : 1 }}>
                                                     {SYMBOLS[piece.color === 'b' ? piece.type : piece.type.toUpperCase()]}
                                                 </span>
                                             )}
@@ -450,39 +569,28 @@ export default function PlayRoom() {
                             )}
                         </div>
                     </div>
-
-                    {/* File labels */}
                     <div style={{ display: 'flex', marginLeft: 20 }}>
                         {files.map(f => (
-                            <div key={f} style={{ width: SQ, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#555', userSelect: 'none' }}>
-                                {f}
-                            </div>
+                            <div key={f} style={{ width: SQ, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#C8A882', userSelect: 'none' }}>{f}</div>
                         ))}
                     </div>
                 </div>
 
-                {/* Bottom player (you) */}
+                {/* Bottom player */}
                 <div className="flex items-center justify-between w-full" style={{ maxWidth: SQ * 8 + 40 }}>
-                    <span className="text-sm font-medium" style={{ color: botActive ? '#fff' : '#555' }}>
-                        {botName} {myColor && <span style={{ color: '#bcfe00' }}>(you)</span>}
+                    <span className="text-sm font-bold" style={{ color: botActive ? '#4A2C0A' : '#C8A882' }}>
+                        {botName} {myColor && <span style={{ color: '#D4722A' }}>(you)</span>}
                     </span>
-                    <div
-                        className="text-2xl font-bold tabular-nums px-3 py-1 rounded-sm"
-                        style={{
-                            color: botActive ? '#000' : '#555',
-                            backgroundColor: botActive ? '#bcfe00' : '#191919',
-                            border: botActive ? 'none' : '1px solid #282828',
-                            minWidth: 80,
-                            textAlign: 'center',
-                        }}
-                    >
-                        {fmt(botTime)}
-                    </div>
+                    {room.timerDuration && (
+                        <div className="text-2xl font-black tabular-nums px-3 py-1"
+                            style={{ color: botActive ? '#FFFDF9' : '#A07650', background: botActive ? '#D4722A' : '#FFFDF9', border: `1.5px solid ${botActive ? '#B85E1A' : '#E8D9A8'}`, boxShadow: `2px 2px 0 ${botActive ? '#B85E1A' : '#C8A882'}`, minWidth: 80, textAlign: 'center' }}>
+                            {fmt(botTime)}
+                        </div>
+                    )}
                 </div>
 
-                {/* Spectator notice */}
                 {!myColor && room.status === 'active' && (
-                    <p className="text-xs uppercase tracking-widest mt-2" style={{ color: '#555' }}>Spectating</p>
+                    <p className="text-xs font-black uppercase tracking-widest mt-2" style={{ color: '#C8A882' }}>Spectating</p>
                 )}
             </div>
         </div>

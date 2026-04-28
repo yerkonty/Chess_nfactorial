@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { DM_Sans } from "next/font/google";
+import { Nunito } from "next/font/google";
 import "./globals.css";
 
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
+const nunito = Nunito({
+  variable: "--font-nunito",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "700"],
+  weight: ["400", "600", "700", "800", "900"],
 });
 
 export const metadata: Metadata = {
@@ -19,8 +19,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${dmSans.variable} h-full`}>
-      <body className="min-h-full flex flex-col bg-black text-white antialiased">
+    <html lang="en" className={`${nunito.variable} h-full`}>
+      <body className="min-h-full flex flex-col antialiased"
+        style={{ background: '#FEF9F0', color: '#4A2C0A' }}>
         {children}
       </body>
     </html>
