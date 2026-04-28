@@ -61,6 +61,8 @@ GROQ_API_KEY="your-groq-api-key"
 
 If you enable payments, add your Stripe keys used in the `/api/stripe/*` routes.
 
+( For now you can do fake payments for figure skins: Card 4242 4242 4242 4242, any month/year/cvv date )
+
 ### 3. Appwrite setup
 
 1) Create a project at [appwrite.io](https://appwrite.io)
