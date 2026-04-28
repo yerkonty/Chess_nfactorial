@@ -9,6 +9,7 @@ import { ID } from "appwrite";
 import ProModal from "./ProModal";
 import { PIECE_SKINS, type PieceSkin } from "@/lib/skins";
 import { playMove, playCapture, playCheck, playGameOver } from "@/lib/sounds";
+import { playMemeMove, playMemeCapture, playMemeCheck, playMemeGameOver, playMemeCaptureQueen, playMemeEnPassant, preloadMemeSounds, stopMemeSound } from "@/lib/memeSounds";
 import { getBestMove, difficultyToDepth } from "@/lib/chessAI";
 
 const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
@@ -95,6 +96,9 @@ export default function Chessboard({
     const [moveCount, setMoveCount] = useState(0);
     const [dragState, setDragState] = useState<{ square: Square; piece: Piece; x: number; y: number } | null>(null);
     const [promotionPending, setPromotionPending] = useState<{ from: Square; to: Square } | null>(null);
+    const [memeMode, setMemeMode] = useState(false);
+    const [memeComment, setMemeComment] = useState('');
+    const [memeLoading, setMemeLoading] = useState(false);
     const gameRef = useRef(game);
 
     // Clock
@@ -129,6 +133,8 @@ export default function Chessboard({
     const startClockRef = useRef<() => void>(() => undefined);
     const updateStatusRef = useRef<() => void>(() => undefined);
     const maybeTriggerAiMoveRef = useRef<(activeGame: Chess) => void>(() => undefined);
+    const fetchMemeRef = useRef<(move: { san: string; piece: string; captured?: string; flags: string; color: string }, isMate: boolean, isCheck: boolean) => void>(() => undefined);
+    const memeModeRef = useRef(false);
 
     function formatClock(secs: number): string {
         const m = Math.floor(secs / 60);
@@ -260,10 +266,17 @@ export default function Chessboard({
             startClock();
             setAiThinking(false);
             updateStatus();
-            if (activeGame.isGameOver()) playGameOver();
-            else if (activeGame.inCheck()) playCheck();
-            else if (aiMove.captured) playCapture();
-            else playMove();
+            const aiMate = activeGame.isCheckmate();
+            const aiChk = activeGame.inCheck();
+            if (memeMode) stopMemeSound();
+            if (activeGame.isGameOver()) { memeMode ? playMemeGameOver(!aiMate) : playGameOver(); }
+            else if (aiChk) { memeMode ? playMemeCheck() : playCheck(); }
+            else if (aiMove.captured) {
+                if (memeMode) { aiMove.captured === 'q' ? playMemeCaptureQueen() : playMemeCapture(); }
+                else playCapture();
+            } else if (memeMode && aiMove.flags.includes('e')) { playMemeEnPassant(); }
+            else { memeMode ? playMemeMove() : playMove(); }
+            fetchMeme(aiMove as { san: string; piece: string; captured?: string; flags: string; color: string }, aiMate, aiChk);
         }, 50); // yield so "AI thinking…" renders first
     }, [aiLevel, startClock, updateStatus]);
 
@@ -287,7 +300,9 @@ export default function Chessboard({
         startClockRef.current = startClock;
         updateStatusRef.current = updateStatus;
         maybeTriggerAiMoveRef.current = maybeTriggerAiMove;
-    }, [startClock, updateStatus, maybeTriggerAiMove]);
+        fetchMemeRef.current = fetchMeme;
+        memeModeRef.current = memeMode;
+    });
 
     // Drag handlers
     useEffect(() => {
@@ -337,10 +352,18 @@ export default function Chessboard({
                                         clockTurnRef.current = activeGame.turn() as 'w' | 'b';
                                         setClockTurn(activeGame.turn() as 'w' | 'b');
                                         startClockRef.current(); updateStatusRef.current();
-                                        if (activeGame.isGameOver()) playGameOver();
-                                        else if (activeGame.inCheck()) playCheck();
-                                        else if (move.captured) playCapture();
-                                        else playMove();
+                                        const dMate = activeGame.isCheckmate();
+                                        const dChk = activeGame.inCheck();
+                                        const dMeme = memeModeRef.current;
+                                        if (dMeme) stopMemeSound();
+                                        if (activeGame.isGameOver()) { dMeme ? playMemeGameOver(!dMate) : playGameOver(); }
+                                        else if (dChk) { dMeme ? playMemeCheck() : playCheck(); }
+                                        else if (move.captured) {
+                                            if (dMeme) { move.captured === 'q' ? playMemeCaptureQueen() : playMemeCapture(); }
+                                            else playCapture();
+                                        } else if (dMeme && move.flags.includes('e')) { playMemeEnPassant(); }
+                                        else { dMeme ? playMemeMove() : playMove(); }
+                                        fetchMemeRef.current(move as { san: string; piece: string; captured?: string; flags: string; color: string }, dMate, dChk);
                                         maybeTriggerAiMoveRef.current(activeGame);
                                     }
                                 } catch { /* invalid drop */ }
@@ -459,12 +482,35 @@ export default function Chessboard({
         finally { setAnalysisLoading(false); }
     }
 
+    function fetchMeme(move: { san: string; piece: string; captured?: string; flags: string; color: string }, afterMate: boolean, afterCheck: boolean) {
+        if (!memeMode) return;
+        setMemeLoading(true);
+        fetch('/api/meme', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                san: move.san,
+                piece: move.piece,
+                captured: move.captured ?? null,
+                flags: move.flags,
+                isCheck: afterCheck,
+                isMate: afterMate,
+                moveColor: move.color,
+            }),
+        })
+            .then(r => r.json())
+            .then(d => { setMemeComment(d.comment ?? '💀'); })
+            .catch(() => { setMemeComment('💀 bro really said that move fr fr'); })
+            .finally(() => setMemeLoading(false));
+    }
+
     function isPawnPromotion(from: Square, to: Square) {
         const p = game.get(from);
         return p?.type === 'p' && (to[1] === '8' || to[1] === '1');
     }
 
     function applyMove(from: Square, to: Square, promotion: 'q' | 'r' | 'b' | 'n' = 'q') {
+        if (memeMode) stopMemeSound();
         try {
             const move = game.move({ from, to, promotion });
             if (move) {
@@ -474,10 +520,16 @@ export default function Chessboard({
                 clockTurnRef.current = game.turn() as 'w' | 'b';
                 setClockTurn(game.turn() as 'w' | 'b');
                 startClock(); updateStatus();
-                if (game.isGameOver()) playGameOver();
-                else if (game.inCheck()) playCheck();
-                else if (move.captured) playCapture();
-                else playMove();
+                const isMate = game.isCheckmate();
+                const isChk = game.inCheck();
+                if (game.isGameOver()) { memeMode ? playMemeGameOver(!isMate) : playGameOver(); }
+                else if (isChk) { memeMode ? playMemeCheck() : playCheck(); }
+                else if (move.captured) {
+                    if (memeMode) { move.captured === 'q' ? playMemeCaptureQueen() : playMemeCapture(); }
+                    else playCapture();
+                } else if (memeMode && move.flags.includes('e')) { playMemeEnPassant(); }
+                else { memeMode ? playMemeMove() : playMove(); }
+                fetchMeme(move as { san: string; piece: string; captured?: string; flags: string; color: string }, isMate, isChk);
                 maybeTriggerAiMove(game);
             }
         } catch { /* invalid */ }
@@ -510,7 +562,7 @@ export default function Chessboard({
         setGame(newGame); setBoard(newGame.board());
         setSelectedSquare(null); setPossibleMoves([]);
         setLastMove(null); setPromotionPending(null);
-        setAnalysis(""); setGameResult(""); setCoachAdvice("");
+        setAnalysis(""); setGameResult(""); setCoachAdvice(""); setMemeComment("");
         setViewIndex(null); setHistoryBoard(null); setHistoryLastMove(null);
         setAiThinking(false);
         gameSavedRef.current = false;
@@ -565,7 +617,11 @@ export default function Chessboard({
     ];
 
     return (
-        <div className="min-h-screen" style={{ background: C.bg, color: C.text }}>
+        <div className="min-h-screen" style={{
+            background: memeMode ? `url('/memes-everywhere.jpg') center/cover fixed` : C.bg,
+            color: C.text,
+            transition: 'background 0.3s ease',
+        }}>
 
             {/* Floating drag piece */}
             {dragState && (
@@ -615,7 +671,7 @@ export default function Chessboard({
             )}
 
             {/* Nav */}
-            <nav style={{ background: C.card, borderBottom: `1.5px solid ${C.border}` }}
+            <nav style={{ background: memeMode ? 'rgba(255,253,249,0.92)' : C.card, borderBottom: `1.5px solid ${C.border}`, backdropFilter: memeMode ? 'blur(6px)' : 'none' }}
                 className="px-6 py-3 flex items-center justify-between">
                 <span className="text-xl font-black tracking-tight" style={{ color: C.text }}>
                     Y<span style={{ color: C.accent }}>Chess</span>
@@ -642,7 +698,7 @@ export default function Chessboard({
                 </div>
             </nav>
 
-            <div className="flex flex-col items-center py-8 px-4 gap-5">
+            <div className="flex flex-col items-center py-8 px-4 gap-5" style={memeMode ? { position: 'relative' } : undefined}>
 
                 {/* Mode selector */}
                 <div className="flex" style={{ border: `1.5px solid ${C.borderStrong}` }}>
@@ -895,6 +951,18 @@ export default function Chessboard({
                         {coachLoading && <div className="spinner" style={{ width: 14, height: 14 }} />}
                         {coachLoading ? 'Thinking…' : 'Ask Coach'}
                     </button>
+                    <button
+                        onClick={() => { setMemeMode(m => { if (!m) preloadMemeSounds(); return !m; }); setMemeComment(''); }}
+                        className="px-5 py-2.5 text-xs font-black uppercase tracking-widest"
+                        style={{
+                            ...mcBtn(memeMode, 'md'),
+                            background: memeMode ? '#1a1a1a' : C.card,
+                            color: memeMode ? '#D4722A' : C.muted,
+                            borderColor: memeMode ? '#D4722A' : C.borderStrong,
+                            boxShadow: memeMode ? `3px 3px 0 #D4722A` : `3px 3px 0 ${C.shadow}`,
+                        }}>
+                        💀 Meme Mode
+                    </button>
                     {isOver && (
                         <button onClick={analyzeGame} disabled={analysisLoading}
                             className="px-5 py-2.5 text-xs font-black uppercase tracking-widest flex items-center gap-2 disabled:opacity-40"
@@ -906,6 +974,40 @@ export default function Chessboard({
                         </button>
                     )}
                 </div>
+
+                {/* Meme Mode panel */}
+                {memeMode && (
+                    <div className="w-full max-w-lg animate-slide-up" style={{ maxWidth: 8 * SQ + COORD }}>
+                        <div style={{
+                            background: '#111',
+                            border: '1.5px solid #D4722A',
+                            boxShadow: '4px 4px 0 #B85E1A',
+                            padding: '14px 18px',
+                            minHeight: 64,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'center',
+                        }}>
+                            <p style={{ fontSize: 9, color: '#D4722A', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 900, marginBottom: 6, fontFamily: 'inherit' }}>
+                                💀 MEME MODE — {moves.length === 0 ? 'make a move fr' : 'no cap'}
+                            </p>
+                            {memeLoading ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="spinner" style={{ width: 12, height: 12 }} />
+                                    <span style={{ color: '#888', fontSize: 12, fontWeight: 700 }}>cooking up a reaction fr fr…</span>
+                                </div>
+                            ) : memeComment ? (
+                                <p style={{ color: '#fff', fontSize: 14, lineHeight: 1.5, fontWeight: 600, fontFamily: 'inherit' }}>
+                                    {memeComment}
+                                </p>
+                            ) : (
+                                <p style={{ color: '#555', fontSize: 12, fontStyle: 'italic', fontFamily: 'inherit' }}>
+                                    waiting for your first move bestie 👀
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Coach panel */}
                 {coachAdvice && (

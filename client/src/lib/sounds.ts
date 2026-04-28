@@ -105,6 +105,154 @@ export function playCheck(): void {
     } catch {}
 }
 
+// ─── Meme sounds ────────────────────────────────────────────────────────────
+
+function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
+
+/** Vine Boom — iconic deep sub-bass punch */
+function vineBoom(ac: AudioContext) {
+    const t = ac.currentTime;
+    const osc = ac.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(90, t);
+    osc.frequency.exponentialRampToValueAtTime(28, t + 0.55);
+    const dist = ac.createWaveShaper();
+    const curve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) { const x = (i * 2) / 255 - 1; curve[i] = Math.tanh(x * 4); }
+    dist.curve = curve;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(1.0, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    osc.connect(dist); dist.connect(g); g.connect(ac.destination);
+    osc.start(t); osc.stop(t + 0.6);
+}
+
+/** Pew — laser sweep down */
+function pew(ac: AudioContext) {
+    const t = ac.currentTime;
+    const osc = ac.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1600, t);
+    osc.frequency.exponentialRampToValueAtTime(120, t + 0.22);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.35, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    osc.connect(g); g.connect(ac.destination);
+    osc.start(t); osc.stop(t + 0.25);
+}
+
+/** Boing — spring bounce up then down */
+function boing(ac: AudioContext) {
+    const t = ac.currentTime;
+    const osc = ac.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(200, t);
+    osc.frequency.exponentialRampToValueAtTime(900, t + 0.12);
+    osc.frequency.exponentialRampToValueAtTime(300, t + 0.28);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    osc.connect(g); g.connect(ac.destination);
+    osc.start(t); osc.stop(t + 0.38);
+}
+
+/** Bruh — deep descending triangle tone */
+function bruh(ac: AudioContext) {
+    const t = ac.currentTime;
+    const osc = ac.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(380, t);
+    osc.frequency.exponentialRampToValueAtTime(70, t + 0.3);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.5, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    osc.connect(g); g.connect(ac.destination);
+    osc.start(t); osc.stop(t + 0.38);
+}
+
+/** Air Horn — BRAAP sawtooth burst */
+function airHorn(ac: AudioContext) {
+    const t = ac.currentTime;
+    [1, 1.26, 1.52, 2.02].forEach(ratio => {
+        const osc = ac.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.value = 230 * ratio;
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.12, t);
+        g.gain.setValueAtTime(0.12, t + 0.18);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+        osc.connect(g); g.connect(ac.destination);
+        osc.start(t); osc.stop(t + 0.35);
+    });
+}
+
+/** Windows XP error — two-tone descend */
+function windowsError(ac: AudioContext) {
+    const t = ac.currentTime;
+    [880, 698].forEach((freq, i) => {
+        const osc = ac.createOscillator();
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0, t + i * 0.16);
+        g.gain.linearRampToValueAtTime(0.18, t + i * 0.16 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.16 + 0.22);
+        osc.connect(g); g.connect(ac.destination);
+        osc.start(t + i * 0.16); osc.stop(t + i * 0.16 + 0.26);
+    });
+}
+
+/** "OHHHH" crowd — big dramatic chord hit */
+function ohhh(ac: AudioContext) {
+    const t = ac.currentTime;
+    [130, 165, 196, 261].forEach(freq => {
+        const osc = ac.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.value = freq;
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.1, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+        osc.connect(g); g.connect(ac.destination);
+        osc.start(t); osc.stop(t + 0.5);
+    });
+}
+
+/** Sad trombone — wah wah wah wahhh */
+function sadTrombone(ac: AudioContext) {
+    const t = ac.currentTime;
+    [466, 392, 330, 247].forEach((freq, i) => {
+        const osc = ac.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.value = freq;
+        const lp = ac.createBiquadFilter();
+        lp.type = 'lowpass'; lp.frequency.value = 1200;
+        const g = ac.createGain();
+        const s = t + i * 0.24;
+        g.gain.setValueAtTime(0, s);
+        g.gain.linearRampToValueAtTime(0.22, s + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.001, s + 0.24);
+        osc.connect(lp); lp.connect(g); g.connect(ac.destination);
+        osc.start(s); osc.stop(s + 0.28);
+    });
+}
+
+/** Victory fanfare — ascending C major arpeggio */
+function victoryFanfare(ac: AudioContext) {
+    const t = ac.currentTime;
+    [523, 659, 784, 1047, 1319].forEach((freq, i) => {
+        const osc = ac.createOscillator();
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        const g = ac.createGain();
+        const s = t + i * 0.1;
+        g.gain.setValueAtTime(0, s);
+        g.gain.linearRampToValueAtTime(0.14, s + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, s + 0.28);
+        osc.connect(g); g.connect(ac.destination);
+        osc.start(s); osc.stop(s + 0.32);
+    });
+}
+
 export function playGameOver(): void {
     try {
         const ac = getCtx();
